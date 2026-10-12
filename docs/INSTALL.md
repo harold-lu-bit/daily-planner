@@ -1,6 +1,6 @@
 # 从仓库部署到 Obsidian Vault
 
-适用于 Research Planner 0.3.2。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
+适用于 Research Planner 0.3.3。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
 
 ## 给 Agent 的部署任务
 
@@ -57,7 +57,7 @@ npm run build
 2. 检查当前插件的 manifest、Daily Notes 设置及模板路径。如果插件已安装，先关闭 Research Planner 或退出 Obsidian，避免运行中的旧代码与新文件混用。
 3. 将已存在的 `main.js`、`manifest.json`、`styles.css` 备份到 Vault 外带时间戳的目录。若要调整配置，另备份将改的具体配置；不要复制整个 `.obsidian`，不要把备份放进 Git。
 4. 将三个发布文件复制到 `<Vault>/<配置目录>/plugins/research-planner/`，缺少目录则创建。保留现有 `data.json`、其他插件、主题和 LiveSync 配置。不要将整个仓库复制进去。
-5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本为 0.3.2。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
+5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本与所选 Release 一致（当前 0.3.3）。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
 6. 在 Obsidian 社区插件设置中允许社区插件并启用 Research Planner。升级时重新启用或重启应用。磁盘文件一致只证明安装成功，仍需确认应用实际加载成功。
 
 若复制中途失败，恢复本次已替换的发布文件；如果期间出现人工修改，则先核对，不覆盖新编辑。不要为了安装而删除已有插件数据或重建同步数据库。
@@ -89,6 +89,7 @@ npm run build
 | API 基础地址 | 所用服务商的 base URL，不含 `/chat/completions`；示例地址见上文 |
 | 模型 ID | 用户提供的准确 model name |
 | JSON 响应模式 | 默认 `json_object`；服务商明确不支持时可选“仅提示词约束” |
+| 输出 token 上限 | 新安装默认 16384；升级保留原值。截断后可手动扩大预算重试，最高 32768，受服务端实际限制约束 |
 | API 密钥 | 通过 Obsidian SecretStorage 添加/选择本机秘密 |
 | 任务章节名称 | 默认 `Tasks`，对应日记二级标题 |
 | 时区 | 默认 `Asia/Shanghai`；多设备保持一致 |
@@ -121,6 +122,7 @@ API key 必须通过 Obsidian SecretStorage 配置，不能放入 `data.json`、
 | 缺少密钥 | SecretStorage 中有实际值，且插件选择了同名秘密；仅复制 data.json 不会迁移密钥 |
 | 连接失败或 HTTP 401/403/404 | 网络、key 权限、model name、base URL；不要重复附加 `/chat/completions` |
 | JSON 模式不兼容 | 核对服务商能力，必要时切换“仅提示词约束”后再测 |
+| 模型输出被截断 / 没有预览 | 查看面板总处理数及错误中的请求预算、输出/推理用量；按需提高上限重试。已有旧稿仅供参考，不能接受。不会自动重复调用 |
 | 模板不存在/变量不支持 | 检查 Daily Notes 路径和模板正文；不支持执行 Templater |
 | “接受并写入”灰色 | 待确认问题、时段冲突、未提交的意见、本机写入开关或正在请求；阅读面板提示 |
 | 配置改后仍不能写入 | 中央 `planner.enabled`，以及是否点击“重新读取并复盘” |
