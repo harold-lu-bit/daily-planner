@@ -23,6 +23,7 @@ $entries = @{
     'docs/VALIDATION.md' = 'docs/VALIDATION.md'
     'docs/REQUIREMENTS.md' = 'docs/REQUIREMENTS.md'
     'docs/INSTALL.md' = 'docs/INSTALL.md'
+    'docs/RELEASING.md' = 'docs/RELEASING.md'
     'examples/Daily.md' = 'examples/Daily.md'
     'examples/plugin-settings.example.json' = 'examples/plugin-settings.example.json'
 }

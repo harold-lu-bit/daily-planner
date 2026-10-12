@@ -8,7 +8,13 @@
 
 ## 安装与升级
 
-**从新机器或交给 Agent 部署，请先读 [完整安装指南](docs/INSTALL.md)。** 仓库可独立克隆、构建和部署，提供 [精简日记模板](examples/Daily.md) 与 [非秘密配置示例](examples/plugin-settings.example.json)。沿用原服务商时只需提供 API key、model name 和目标 Vault 的访问权限；更换服务商还需 API base URL。密钥使用 Obsidian SecretStorage，不进入仓库。
+**从新机器或交给 Agent 部署，请先读 [完整安装指南](docs/INSTALL.md)。** 推荐在 Obsidian 的 BRAT 中添加公开仓库 `harold-lu-bit/daily-planner`，选择 latest，之后通过 BRAT 检查更新，无需 GitHub token 或本地编译。已有手工安装可由 BRAT 接管，保留 `data.json`。各平台步骤、可复制的 Agent 任务和回退说明均在安装指南中。
+
+维护者按 [发布指南](docs/RELEASING.md) 提交、推送版本 tag，Actions 自动测试、构建并创建带三个独立插件附件的 [GitHub Release](https://github.com/harold-lu-bit/daily-planner/releases)。只推送源码不会让其他设备收到更新。
+
+首次安装提供 [精简日记模板](examples/Daily.md) 与 [非秘密配置示例](examples/plugin-settings.example.json)。沿用原服务商时只需提供 API key、model name 和目标 Vault 的访问权限；更换服务商还需 API base URL。密钥使用 Obsidian SecretStorage，不进入仓库。已有设备只更新插件时无需重新配置模型。
+
+需要开发或从源码安装时：
 
 ```sh
 git clone https://github.com/harold-lu-bit/daily-planner.git

@@ -18,7 +18,7 @@ for name in ['yaml', 'zod']:
 with zipfile.ZipFile(out / filename, 'w', zipfile.ZIP_DEFLATED) as bundle:
     for name in ['main.js', 'manifest.json', 'styles.css']:
         bundle.write(root / name, f"{manifest['id']}/{name}")
-    for name in ['README.md', 'AGENTS.md', 'docs/VALIDATION.md', 'docs/REQUIREMENTS.md', 'docs/INSTALL.md', 'examples/Daily.md', 'examples/plugin-settings.example.json']:
+    for name in ['README.md', 'AGENTS.md', 'docs/VALIDATION.md', 'docs/REQUIREMENTS.md', 'docs/INSTALL.md', 'docs/RELEASING.md', 'examples/Daily.md', 'examples/plugin-settings.example.json']:
         bundle.write(root / name, name)
     bundle.writestr('THIRD-PARTY-LICENSES.txt', '\n\n'.join(licenses))
 digest = hashlib.sha256((out / filename).read_bytes()).hexdigest()

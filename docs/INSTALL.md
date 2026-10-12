@@ -1,18 +1,35 @@
 # 从仓库部署到 Obsidian Vault
 
-适用于 Research Planner 0.3.2。仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。不需要原 Windows 工作空间、迁移压缩包、WSL、Python 后台服务或其他 Obsidian 社区插件。部署请求授权安装；日程写入仍由用户在面板接受草稿。
+适用于 Research Planner 0.3.2。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
 
 ## 给 Agent 的部署任务
 
 可以直接使用下面的指令，通过受保护的凭据输入方式另外提供 API key：
 
-> 请按此仓库 AGENTS.md 和 docs/INSTALL.md，将 Research Planner 部署到我的 Obsidian Vault。沿用 examples/plugin-settings.example.json 的服务商地址，model-name 为 `<模型名称>`，API key 另行安全提供。请识别目标 Vault；有多个候选时让我指定。保留现有日记、模板和同步设置，完成构建、安装与配置，密钥放进 Obsidian SecretStorage。验证插件加载和合成连接测试，不生成或接受真实日程。报告安装版本、备份位置及尚需我操作的步骤。
+> 请按此仓库 AGENTS.md 和 docs/INSTALL.md，通过 BRAT 安装/更新 harold-lu-bit/daily-planner 的最新发布版到我的 Obsidian Vault。请识别目标 Vault；有多个候选时让我指定。保留已有 data.json、日记、模板、其他 BRAT 项目和同步设置，备份现有发布文件，配置 BRAT 持续跟踪并核验实际加载。首次安装沿用 examples/plugin-settings.example.json 的服务商地址，model-name 为 `<模型名称>`，API key 另行安全提供并放入本机 Obsidian SecretStorage；已有配置不重置。不生成或接受真实日程，不因更新调用模型。报告 Release、版本、备份位置及尚需我操作的步骤。
 
-最少需要：仓库访问权限、目标设备/Vault 的访问权限、API key、准确的 model name。只有一个可明确识别的 Vault 时，Agent 可以自行读取其路径与日记设置；多个 Vault 时需要用户指定。
+最少需要：目标设备/Vault 的访问权限；首次配置还需要 API key、准确的 model name。仓库现在公开，BRAT 下载无需 GitHub token；已有配置的设备更新不需要重新提供模型凭据。只有一个可明确识别的 Vault 时，Agent 可以自行读取其路径与日记设置；多个 Vault 时需要用户指定。
 
 仓库已包含原服务商的不含密钥的地址示例 `https://llm.inner.bza.edu.cn/plan/v1`。**沿用这个服务商时无需重复提供地址；更换服务商必须提供 API base URL。** 不要根据 key 的形状或 model name 猜地址。目标机器必须能访问所选服务商；仓库访问权限不代表 API 网络权限。
 
-## 1. 获取并构建
+## 推荐：BRAT 安装与更新
+
+Windows、macOS、Linux 使用相同流程；Android/iOS 在 Obsidian 内操作，不需要手机终端或编译工具。插件最低 Obsidian 版本是 1.13.0，BRAT 自身也须满足其最低版本要求。移动端尚未实机验收，不能把桌面成功作为手机验证。
+
+1. 识别目标 Vault 及实际配置目录，先保存当前编辑并关闭未提交的规划草稿。旧安装先将三个发布文件备份到 Vault 外，保留 `data.json`；不要卸载 Research Planner 来升级。
+2. 在 Obsidian 社区插件中安装并启用 **BRAT**（作者 TfTHacker，ID `obsidian42-brat`）；已有 BRAT 沿用配置和其他插件列表。
+3. 打开 BRAT 设置，选择 **Add Beta plugin**，填入 `harold-lu-bit/daily-planner`（或仓库 URL），选择 **latest**，添加并启用。此处 Beta 是 BRAT 的功能名，不代表必须安装测试版。仓库公开，无需 GitHub PAT，更不能填模型 API key。
+4. 已经手工安装过的同名插件也应加入 BRAT 管理；按界面提示更新/重新安装。若当前版本相同，普通检查可能跳过下载；需要重新部署时使用 BRAT 的重新安装/版本管理功能。不要用删除插件目录的方法强制更新。核对 BRAT 列表显示本仓库，跟踪版本为 latest，且未意外固定旧版。
+5. 以后通过 BRAT 的 **Check for updates** 命令/设置检查更新；可以按需开启启动时检查。只有维护者发布新的 Release 才能得到新版，推送源码不算发布。配置更新频率时保留用户对其他 BRAT 插件的偏好。
+6. 检查社区插件中的 Research Planner 版本，必要时重新启用/重启 Obsidian；打开“日记复盘”面板确认实际加载。不要点击“开始复盘”或“接受并写入”来验证升级。首次配置再继续本指南的日记、模型和本机开关章节。
+
+发布入口：[GitHub Releases](https://github.com/harold-lu-bit/daily-planner/releases)。BRAT 管理的三个文件位于 `<Vault>/<配置目录>/plugins/research-planner/`。桌面 Agent 可下载同一 Release 的附件，对比 SHA-256；手机无法读文件时至少核验 BRAT/插件设置的版本及面板加载，并注明未做文件哈希检查。
+
+如果未来仓库改回私有：每台设备需为 BRAT 配置专用 fine-grained GitHub token，仅选择此仓库、Contents 只读，通过 BRAT 的秘密存储界面添加/选择。不要复用开发者广权限 token，也不要将 token 写入说明、URL 或聊天。公开仓库不需要这一步。密钥名称同步不代表本机已存实际秘密。
+
+BRAT 不可用时，可从 Release 下载独立的 `main.js`、`manifest.json`、`styles.css` 和 `SHA256SUMS.txt`，核验后按第 2 节安装。这是手工 Release 安装，后续不会自动更新；不要误报为 BRAT 已配置。发布和维护流程见 [RELEASING.md](RELEASING.md)。
+
+## 1. 可选：从源码获取并构建
 
 需要 Git、Node.js 22（原生 Windows / macOS / Linux 均可）与随附的 npm。Obsidian 最低版本以 `manifest.json` 为准，目前是 1.13.0，需要 SecretStorage 支持。安装后运行插件不需要 Node.js。
 
@@ -108,6 +125,6 @@ API key 必须通过 Obsidian SecretStorage 配置，不能放入 `data.json`、
 
 ## 升级、同步和回退
 
-升级沿用同样的三文件备份/替换流程；不要重置 API 设置、日记模板或本机数据。0.3.2 的队列增加 wasChecklist 清单边界记录（仍为 version 2），0.3.1 及更早版本不能读取新字段；所有操作同一 Vault 的设备需要兼容版本，不能假设密钥与本机开关随 Markdown 同步。
+升级优先由 BRAT 获取新 Release，保留三文件备份；手工安装则沿用三文件备份/替换流程。不要重置 API 设置、日记模板或本机数据。0.3.2 的队列增加 wasChecklist 清单边界记录（仍为 version 2），0.3.1 及更早版本不能读取新字段；所有操作同一 Vault 的设备需要兼容版本，不能假设密钥与本机开关随 Markdown 同步。
 
 仅替换发布文件、尚未接受新草稿时，可以恢复刚备份的发布文件。已经接受新草稿后，不要只回退插件而留下旧版不能读取的队列；先用当前版本的“恢复 / 撤销”或成套笔记/队列备份处理状态兼容性。存在后续人工修改时须先核对，不强行覆盖。插件不保证两台设备离线同时编辑时的分布式原子性。

@@ -7,6 +7,7 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "build": "npm run check && node scripts/build.mjs",
+    "release:prepare": "npm run build && node scripts/prepare-release.mjs",
     "test:live": "node scripts/live.mjs",
     "test:obsidian": "node scripts/obsidian.mjs",
     "package": "npm run build && python3 scripts/package.py",
