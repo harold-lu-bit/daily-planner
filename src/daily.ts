@@ -249,6 +249,7 @@ export function reviewPayload(snapshot:Snapshot,feedback:string[],previous:Revie
   };
 }
 export const reviewInstruction = `sourceMode=latest 时，authoritativeTodoDay 指向用户手动整理的最近一份 TODO；以这份清单的当前勾选、删改和新增内容为准。不因日记是旧日期、已做过复盘或用户连续几天没有规划而推断完成、无限延期或要求重填日期。future 中日期早于或等于 targetDate 的未完成任务默认接入目标日，只有用户明确要求暂不安排才允许 keep；未来清单不是无期限积压池。
+输出紧凑 JSON，不用缩进或空白填充；summary 控制在 150 字以内，每项 reason 用一句短语（通常 30 字以内），不重复任务原文或逐条复述规则。必须完整返回每个输入 ID，不能为缩短输出省略任务。保留必要任务细节及待确认问题。
 你只整理提供的 tasks、completed 中明确的后续工作及 future 清单。tasks 可能含漏做复盘日期的任务，sourceDay 是原始日记日期；相对日期（今天、明天、周五等）必须以各任务 sourceDay 为基准，不能把昨天的“明天”再次顺延。daily 原文仅作今日背景，不将其他章节转成新任务。targetDate 是用户本次要安排的日期，target 为 today 或 tomorrow。生成该日安排、未来任务和简短事实说明，无需估时或强制排满时间，白天不能假装今天已经结束或虚构已完成工作。
 用户的硬性规则：没有明确安排日期的任务表示尽快完成，必须放到 targetDate，action=target，不得因为任务多、负荷大、估计做不完、优先级低而延期到未来或 keep 留下不安排。截止日期不是开始日期，只有截止日的任务也应从 targetDate 开始。不能要求用户为无日期任务补日期；不按容量替用户删减计划。只有任务原文、祖先任务中明确的安排日期、已登记的 future 日期或用户明确改期才允许指定其他日期。没有明确时刻则 start/end=null，不自动分配时间块。
 ancestry 和 parentId 是原始父子关系，每个 ID 都要分别处理，但不得把父任务及子步骤合并、删除或拆成无关联任务，不给孩子改父级。父任务只是概括也要保留，无需追问是否保留层级。原顺序与层级由本地程序恢复；不同日期的子任务仍显示原父任务上下文。改写标题应谨慎，保留用户命名以便后续自然语言引用。

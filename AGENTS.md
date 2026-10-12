@@ -1,6 +1,7 @@
 # Research Planner — agent entry point
 
-- This is the standalone Obsidian plugin, version 0.3.2. The GitHub repository is daily-planner; the plugin ID remains research-planner. Do not rename its installation directory or queue paths.
+- This is the standalone Obsidian plugin, version 0.3.3. The GitHub repository is daily-planner; the plugin ID remains research-planner. Do not rename its installation directory or queue paths.
+- New installs default to 16384 output tokens; preserve existing custom settings on update. Truncation diagnostics contain numeric usage only, never raw model/diary/secret text. Increasing the budget and retrying requires a user action; never auto-loop requests or accept a stale preview after failed regeneration.
 - For deployment, read docs/INSTALL.md first. No original Windows workspace, WSL, sibling repository or migration archive is needed. Read docs/REQUIREMENTS.md and docs/VALIDATION.md before code changes.
 - Prefer published GitHub Release assets and BRAT for end-device installs/updates; read docs/RELEASING.md for publishing. A source push alone does not publish an update. The repository is public; BRAT needs no private-repository token. Keep the plugin ID research-planner and existing data.json. Never reuse a developer's broad GitHub credential for BRAT.
 - For a release, align manifest/package/lockfile versions, update CHANGELOG, test, commit/push, then push the matching numeric tag (no v prefix). The release workflow tests and publishes an explicit asset allowlist. Verify the resulting release assets and hashes; do not replace an already published version. BRAT tracking, files installed and application actually loaded are separate checks.

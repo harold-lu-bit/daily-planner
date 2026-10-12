@@ -26,6 +26,7 @@ function fixture() {
   const service=new DailyService(store,async(day):Promise<Layout>=>({day,todayPath:`daily/${day}.md`,tomorrowPath:`daily/${addDay(day,1)}.md`,templatePath:'template.md',heading:'Tasks',enabled:true}));
   const plugin=new ResearchPlanner(null!,null!);
   Object.assign(plugin,{app:{workspace:{getLeavesOfType:()=>[]},saveLocalStorage:vi.fn(),secretStorage:{getSecret:()=> 'synthetic-key'}}});
+  Object.assign(plugin,{saveData:vi.fn(async()=>{})});
   plugin.service=service;plugin.settings.baseUrl='https://synthetic.invalid';plugin.settings.model='synthetic';plugin.device.writes=true;
   const calls:Record<string,unknown>[]=[];
   const transport:Transport=async(_url,body)=>{
@@ -37,6 +38,48 @@ function fixture() {
   return {plugin,files,calls};
 }
 describe('Planning controls and confirmation',()=>{
+  it('保留重读失败前的预览，但禁止接受；成功重试后才恢复写入',async()=>{
+    const {plugin,files}=fixture();await plugin.begin();const old=plugin.draft;
+    const control=plugin as unknown as {transport:Transport},success=control.transport;
+    control.transport=async()=>({status:200,json:{choices:[{finish_reason:'length',message:{content:'partial'}}],usage:{prompt_tokens:500,completion_tokens:16384}}});
+    files.set('daily/2026-10-09.md','## Tasks\n- [ ] 人工追加的新任务\n');const before=new Map(files);
+    await expect(plugin.begin()).rejects.toThrow('截断');
+    expect(plugin.draft).toBe(old);expect(plugin.draftStale).toBe(true);expect(plugin.device.output).toBe(16384);
+    await expect(plugin.accept()).rejects.toThrow('旧稿');expect(files).toEqual(before);
+    control.transport=success;await plugin.retry();
+    expect(plugin.draftStale).toBe(false);expect(plugin.draft!.review.decisions[0].text).toBe('人工追加的新任务');
+    expect(files).toEqual(before);
+  });
+  it('首次截断后可无调整意见重试，扩大预算只在明确调用时发生',async()=>{
+    const {plugin,files}=fixture();plugin.settings.maxTokens=8192;
+    const control=plugin as unknown as {transport:Transport},success=control.transport;
+    const limits:number[]=[];
+    control.transport=async(url,body,key)=>{
+      limits.push(JSON.parse(body).max_tokens);
+      if(limits.length===1)return {status:200,json:{choices:[{finish_reason:'length',message:{content:null}}]}};
+      return success(url,body,key);
+    };
+    const before=new Map(files);await expect(plugin.begin()).rejects.toThrow('截断');
+    expect(limits).toEqual([8192]);expect(plugin.draft).toBeNull();expect(plugin.settings.maxTokens).toBe(8192);
+    await plugin.retryWithMoreTokens();expect(limits).toEqual([8192,16384]);
+    expect(plugin.draft).not.toBeNull();expect(plugin.lastTruncation).toBeNull();expect(files).toEqual(before);
+  });
+  it('调整失败保留意见和旧预览，不能接受旧稿；重试不会丢失意见',async()=>{
+    const {plugin,files,calls}=fixture();await plugin.begin();const old=plugin.draft;
+    const control=plugin as unknown as {transport:Transport},success=control.transport;
+    control.transport=async()=>{throw Error('network')};plugin.device.notes='今天优先做这个';const before=new Map(files);
+    await expect(plugin.iterate()).rejects.toThrow('网络');expect(plugin.draft).toBe(old);
+    expect(plugin.device.notes).toBe('今天优先做这个');await expect(plugin.accept()).rejects.toThrow('旧稿');
+    control.transport=success;await plugin.retry();expect(calls.at(-1)!.feedback).toEqual(['今天优先做这个']);
+    expect(plugin.device.notes).toBe('');expect(plugin.draftStale).toBe(false);expect(files).toEqual(before);
+  });
+  it('输出预算不超过 32768；没有截断时不能扩大预算重试',async()=>{
+    const {plugin}=fixture();await expect(plugin.retryWithMoreTokens()).rejects.toThrow('检查');
+    plugin.settings.maxTokens=32768;
+    (plugin as unknown as {transport:Transport}).transport=async()=>({status:200,json:{choices:[{finish_reason:'length',message:{content:''}}]}});
+    await expect(plugin.begin()).rejects.toThrow('截断');await expect(plugin.retryWithMoreTokens()).rejects.toThrow('检查');
+    expect(plugin.settings.maxTokens).toBe(32768);
+  });
   it('sends today target, local time and missed-day sources, writes only after explicit acceptance',async()=>{
     const {plugin,files,calls}=fixture();plugin.planTarget='today';files.set('daily/2026-10-09.md','## Tasks\n');const before=new Map(files);
     await plugin.begin();expect(files).toEqual(before);expect(calls[0].target).toBe('today');expect(calls[0].currentTime).toBe('10:00');
