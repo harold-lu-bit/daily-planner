@@ -1,0 +1,26 @@
+.rp-panel { padding: 18px; }
+.rp-eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .16em; color: var(--text-accent); margin-top: 8px; }
+.rp-panel h2 { margin: 10px 0; font-size: 23px; }
+.rp-muted { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.rp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.rp-actions button { font-size: 12px; }
+.rp-stats { border-top: 1px solid var(--background-modifier-border); margin-top: 20px; padding: 16px 0; color: var(--text-muted); }
+.rp-stats strong { color: var(--text-normal); font-size: 20px; }
+.rp-task { border: 1px solid var(--background-modifier-border); border-radius: 10px; padding: 14px; margin-bottom: 10px; background: var(--background-primary); }
+.rp-task > strong { display: block; line-height: 1.5; }
+.rp-task .rp-actions { margin-bottom: 0; }
+.rp-hint { border-left: 3px solid var(--interactive-accent); background: var(--background-secondary); padding: 10px; font-size: 12px; }
+.rp-field { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font-size: 13px; }
+.rp-field input, .rp-field textarea { width: 100%; }
+.rp-field input[type=checkbox] { width: auto; align-self: flex-start; }
+.rp-field textarea { resize: vertical; }
+.rp-form select { margin: 6px 12px 6px 0; }
+.rp-status { white-space: pre-wrap; font-size: 12px; color: var(--text-accent); }
+.rp-empty { padding: 24px 0; color: var(--text-muted); line-height: 1.7; }
+.rp-draft { width: min(760px, 90vw); }
+.rp-draft pre { white-space: pre-wrap; font-size: 12px; max-height: 300px; overflow: auto; }
+.rp-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 320px; overflow: auto; }
+.rp-panel .rp-summary { white-space: pre-wrap; line-height: 1.7; }
+.rp-panel p { overflow-wrap: anywhere; }
+.rp-panel details { margin: 12px 0; }
+@media (max-width: 600px) { .rp-panel { padding: 12px; } .rp-actions button { min-height: 40px; } }

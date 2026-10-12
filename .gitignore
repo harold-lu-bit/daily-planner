@@ -1,0 +1,16 @@
+node_modules/
+main.js
+dist/
+.test-runtime/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+# Machine-specific restoration material and screenshots remain local.
+docs/WINDOWS-RESTORE-HANDOFF.md
+docs/screenshots/
+.obsidian/
+data.json
+*.pem
+*.key

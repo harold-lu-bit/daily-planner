@@ -1,0 +1,11 @@
+import { expect, it } from 'vitest';
+import { z } from 'zod';
+import { callModel, endpoint, type ProviderConfig } from '../src/provider';
+const config:ProviderConfig={baseUrl:'https://example.com/plan/v1',model:'test-model',format:'json_object',timeout:5,maxTokens:1000};
+const schema=z.object({ok:z.literal(true)}).strict();
+it('追加唯一接口路径',()=>{expect(endpoint(config.baseUrl)).toBe('https://example.com/plan/v1/chat/completions');expect(()=>endpoint(config.baseUrl+'/chat/completions')).toThrow();expect(()=>endpoint('https://user:key@example.com')).toThrow();});
+it('严格结构化成功，记录 usage',async()=>{const r=await callModel(config,'test-secret',async(url,body,key)=>{expect(url).toBe(endpoint(config.baseUrl));expect(key).toBe('test-secret');expect(JSON.parse(body).response_format.type).toBe('json_object');return {status:200,json:{choices:[{message:{content:'{"ok":true}'}}],usage:{prompt_tokens:10,completion_tokens:5}}};},schema,'',{});expect(r).toEqual({value:{ok:true},usage:{input:10,output:5}});});
+it('网络错误不会回显凭据或请求正文',async()=>{await expect(callModel(config,'test-secret',async()=>{throw new Error('test-secret sensitive-body');},schema,'',{})).rejects.toThrow('网络');});
+it('HTTP 错误不回显上游 body',async()=>{await expect(callModel(config,'test-secret',async()=>({status:401,json:{secret:'test-secret'}}),schema,'',{})).rejects.toThrow('HTTP 401');});
+it.each(['not json','{"ok":false}','{"ok":true,"extra":"untrusted"}'])('拒绝格式错误响应 %s',async content=>{await expect(callModel(config,'key',async()=>({status:200,json:{choices:[{message:{content}}]}}),schema,'',{})).rejects.toThrow('结构');});
+it('截断响应不能变成草稿',async()=>{await expect(callModel(config,'key',async()=>({status:200,json:{choices:[{finish_reason:'length',message:{content:'{"ok":true}'}}]}}),schema,'',{})).rejects.toThrow('截断');});

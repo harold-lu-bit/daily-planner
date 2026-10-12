@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-research-planner",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "npm run check && node scripts/build.mjs",
+    "test:live": "node scripts/live.mjs",
+    "test:obsidian": "node scripts/obsidian.mjs",
+    "package": "npm run build && python3 scripts/package.py",
+    "package:windows": "npm run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1"
+  },
+  "dependencies": {
+    "zod": "^3.24.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "playwright": "^1.50.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
