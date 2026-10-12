@@ -19,11 +19,13 @@ Windows、macOS、Linux 使用相同流程；Android/iOS 在 Obsidian 内操作�
 1. 识别目标 Vault 及实际配置目录，先保存当前编辑并关闭未提交的规划草稿。旧安装先将三个发布文件备份到 Vault 外，保留 `data.json`；不要卸载 Research Planner 来升级。
 2. 在 Obsidian 社区插件中安装并启用 **BRAT**（作者 TfTHacker，ID `obsidian42-brat`）；已有 BRAT 沿用配置和其他插件列表。
 3. 打开 BRAT 设置，选择 **Add Beta plugin**，填入 `harold-lu-bit/daily-planner`（或仓库 URL），选择 **latest**，添加并启用。此处 Beta 是 BRAT 的功能名，不代表必须安装测试版。仓库公开，无需 GitHub PAT，更不能填模型 API key。
-4. 已经手工安装过的同名插件也应加入 BRAT 管理；按界面提示更新/重新安装。若当前版本相同，普通检查可能跳过下载；需要重新部署时使用 BRAT 的重新安装/版本管理功能。不要用删除插件目录的方法强制更新。核对 BRAT 列表显示本仓库，跟踪版本为 latest，且未意外固定旧版。
+4. 已经手工安装过的同名插件也应加入 BRAT 管理；按界面提示更新/重新安装。若当前版本相同，普通检查可能跳过下载；需要重新部署时点击本仓库旁的 **更改版本和设置**，选择 **最新版本**，勾选安装后启用，再点 **更改版本**（BRAT 2.2.0 界面）。不要用删除插件目录的方法强制更新。核对 BRAT 列表显示本仓库，跟踪版本为 latest，且未意外固定旧版。
 5. 以后通过 BRAT 的 **Check for updates** 命令/设置检查更新；可以按需开启启动时检查。只有维护者发布新的 Release 才能得到新版，推送源码不算发布。配置更新频率时保留用户对其他 BRAT 插件的偏好。
 6. 检查社区插件中的 Research Planner 版本，必要时重新启用/重启 Obsidian；打开“日记复盘”面板确认实际加载。不要点击“开始复盘”或“接受并写入”来验证升级。首次配置再继续本指南的日记、模型和本机开关章节。
 
 发布入口：[GitHub Releases](https://github.com/harold-lu-bit/daily-planner/releases)。BRAT 管理的三个文件位于 `<Vault>/<配置目录>/plugins/research-planner/`。桌面 Agent 可下载同一 Release 的附件，对比 SHA-256；手机无法读文件时至少核验 BRAT/插件设置的版本及面板加载，并注明未做文件哈希检查。
+
+BRAT 安装时会重新序列化 manifest.json，空白/缩进可能与 Release 附件不同。附件本身仍须通过全部校验和；安装后 main.js、styles.css 应逐字节一致，manifest 则解析 JSON 比较全部字段，不能把仅格式变化误判为安装失败。
 
 如果未来仓库改回私有：每台设备需为 BRAT 配置专用 fine-grained GitHub token，仅选择此仓库、Contents 只读，通过 BRAT 的秘密存储界面添加/选择。不要复用开发者广权限 token，也不要将 token 写入说明、URL 或聊天。公开仓库不需要这一步。密钥名称同步不代表本机已存实际秘密。
 

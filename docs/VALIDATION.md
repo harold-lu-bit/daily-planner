@@ -3,7 +3,10 @@
 ## Release 与 BRAT 流程 — 2026-10-12
 
 - Windows 重新运行 159 项测试全部通过，类型检查、发布构建和工作流 YAML 解析通过；故意设置不匹配的 RELEASE_TAG 会拒绝打包。首次沙箱执行被依赖 realpath 权限阻止，允许工作区测试进程正常读取依赖后通过。
-- 新发布准备命令生成三个独立插件文件、第三方许可证及逐文件 SHA-256；main.js 与此前 0.3.2 构建一致。本次只增加发布工具和说明，不改变运行逻辑。云端发布与真实设备安装结果完成后另行记录。
+- 新发布准备命令生成三个独立插件文件、第三方许可证及逐文件 SHA-256；main.js 与此前 0.3.2 构建一致。本次只增加发布工具和说明，不改变运行逻辑。Windows ZIP 打包也确认包含发布指南。
+- tag `0.3.2` 对应提交 `d11f98d62a210022e2a3d73e58a9f7e2efc9d089`；[Actions 38225192953](https://github.com/harold-lu-bit/daily-planner/actions/runs/38225192953) 在 Ubuntu 上完成 npm ci、159 项测试、类型检查、构建及 Release 发布。下载所有附件通过 SHA-256 检查，三个发布文件与 Windows 构建一致。
+- Windows Obsidian 1.14.4 / BRAT 2.2.0：通过 BRAT 添加公开仓库，并在“更改版本和设置”中选择“最新版本”重新安装。确认 `latest` 跟踪和原有启动时更新设置；原有 ZotLit 固定版本及其他 BRAT 设置保留。安装前的三个程序文件和 BRAT 配置备份只保存在本机忽略目录，不进入 Git。
+- 实际安装的 main.js、styles.css 与 Release 哈希一致；BRAT 将 manifest 压缩为单行，解析后的全部字段与发布版一致，版本 0.3.2。Research Planner 的 data.json 哈希未变，插件仍启用，重载后的面板显示“最近一份 TODO（默认）”。这仅是安装/加载验收，未运行真实规划、模型请求、日记写入、Android/iOS 或跨设备同步验收。
 
 ## 0.3.2 — 2026-10-12
 
