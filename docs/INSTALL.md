@@ -1,6 +1,6 @@
 # 从仓库部署到 Obsidian Vault
 
-适用于 Research Planner 0.3.1。仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。不需要原 Windows 工作空间、迁移压缩包、WSL、Python 后台服务或其他 Obsidian 社区插件。部署请求授权安装；日程写入仍由用户在面板接受草稿。
+适用于 Research Planner 0.3.2。仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。不需要原 Windows 工作空间、迁移压缩包、WSL、Python 后台服务或其他 Obsidian 社区插件。部署请求授权安装；日程写入仍由用户在面板接受草稿。
 
 ## 给 Agent 的部署任务
 
@@ -38,7 +38,7 @@ npm run build
 2. 检查当前插件的 manifest、Daily Notes 设置及模板路径。如果插件已安装，先关闭 Research Planner 或退出 Obsidian，避免运行中的旧代码与新文件混用。
 3. 将已存在的 `main.js`、`manifest.json`、`styles.css` 备份到 Vault 外带时间戳的目录。若要调整配置，另备份将改的具体配置；不要复制整个 `.obsidian`，不要把备份放进 Git。
 4. 将三个发布文件复制到 `<Vault>/<配置目录>/plugins/research-planner/`，缺少目录则创建。保留现有 `data.json`、其他插件、主题和 LiveSync 配置。不要将整个仓库复制进去。
-5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本为 0.3.1。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
+5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本为 0.3.2。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
 6. 在 Obsidian 社区插件设置中允许社区插件并启用 Research Planner。升级时重新启用或重启应用。磁盘文件一致只证明安装成功，仍需确认应用实际加载成功。
 
 若复制中途失败，恢复本次已替换的发布文件；如果期间出现人工修改，则先核对，不覆盖新编辑。不要为了安装而删除已有插件数据或重建同步数据库。
@@ -89,7 +89,7 @@ API key 必须通过 Obsidian SecretStorage 配置，不能放入 `data.json`、
 
 ## 5. 验收及交接
 
-- 打开“日记复盘”面板，确认没有加载错误，能看到今天/明天选项与补读设置。只打开面板不会读取任务或调用模型。
+- 打开“日记复盘”面板，确认没有加载错误，能看到今天/明天选项以及默认的“最近一份 TODO”来源设置。只打开面板不会读取任务或调用模型。
 - 在插件设置中点击“测试连接”：仅发送合成 JSON，不发送 Vault 笔记，但会使用少量 API 额度。用户仅要求离线安装时跳过并注明。报告 HTTP 错误码或兼容性问题，不输出密钥或服务端原始错误正文。
 - 检查 Daily Notes 指向的模板确实存在且变量受支持，以及本机写入开关和可选中央开关。不要以验证安装为由点击“接受并写入”。
 - 向用户报告仓库提交、磁盘插件版本、实际加载是否观察到、Vault/安装目录、备份位置、连接测试结果、待完成的本机步骤。用户之后手动生成第一份草稿并确认任务去向。
@@ -108,6 +108,6 @@ API key 必须通过 Obsidian SecretStorage 配置，不能放入 `data.json`、
 
 ## 升级、同步和回退
 
-升级沿用同样的三文件备份/替换流程；不要重置 API 设置、日记模板或本机数据。0.3.1 的队列含任务父级与身份元数据，所有操作同一 Vault 的设备需要兼容版本，不能假设密钥与本机开关随 Markdown 同步。
+升级沿用同样的三文件备份/替换流程；不要重置 API 设置、日记模板或本机数据。0.3.2 的队列增加 wasChecklist 清单边界记录（仍为 version 2），0.3.1 及更早版本不能读取新字段；所有操作同一 Vault 的设备需要兼容版本，不能假设密钥与本机开关随 Markdown 同步。
 
 仅替换发布文件、尚未接受新草稿时，可以恢复刚备份的发布文件。已经接受新草稿后，不要只回退插件而留下旧版不能读取的队列；先用当前版本的“恢复 / 撤销”或成套笔记/队列备份处理状态兼容性。存在后续人工修改时须先核对，不强行覆盖。插件不保证两台设备离线同时编辑时的分布式原子性。

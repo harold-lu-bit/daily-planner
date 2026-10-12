@@ -18,7 +18,7 @@ function button(el:HTMLElement,text:string,action:()=>void,primary=false):HTMLBu
 export default class ResearchPlanner extends Plugin {
  settings:Settings={...DEFAULTS};device:Device=fresh();service!:DailyService;busy=false;
  snapshot:Snapshot|null=null;draft:DailyDraft|null=null;feedback:string[]=[];status='';
- planTarget:'today'|'tomorrow'='tomorrow';catchUp=true;catchUpFrom='';
+ planTarget:'today'|'tomorrow'='tomorrow';catchUp=true;catchUpFrom='';sourceMode:'latest'|'range'='latest';
  private deviceKey='';private generation=0;private checkingReminder=false;
  async onload():Promise<void> {
   this.settings={...DEFAULTS,...await this.loadData()};
@@ -84,7 +84,7 @@ export default class ResearchPlanner extends Plugin {
  }
  async begin():Promise<void>{
   if(this.device.journal?.state==='pending')throw new Error('存在未完成写入，请先使用“恢复 / 撤销”处理');
-  const next=await this.service.snapshot(today(this.settings.timezone),{target:this.planTarget,catchUp:this.catchUp,from:this.catchUp?this.catchUpFrom||undefined:undefined});
+  const next=await this.service.snapshot(today(this.settings.timezone),{target:this.planTarget,catchUp:this.catchUp,sourceMode:this.sourceMode,from:this.catchUp&&this.sourceMode==='range'?this.catchUpFrom||undefined:undefined});
   if(this.snapshot?.layout.day!==next.layout.day)this.feedback=[];
   this.snapshot=next;this.draft=null;
   await this.generate();
@@ -151,11 +151,13 @@ class ReviewView extends ItemView {
  render():void {
   const p=this.plugin,el=this.contentEl;el.empty();el.addClass('rp-panel');
   el.createEl('div',{text:'RESEARCH PLANNER · DAILY',cls:'rp-eyebrow'});el.createEl('h2',{text:'接续任务，安排日程'});
-  el.createEl('p',{text:'先勾选已经完成的任务、删除不再需要的任务。白天可安排今天，晚上可安排明天；遗漏日记中的任务会一起列出供你确认。',cls:'rp-muted'});
+  el.createEl('p',{text:'先在最近那篇 TODO 中勾选完成项、删改旧任务并追加新任务，再选择安排今天或明天。中断几天也会按这份清单继续。',cls:'rp-muted'});
   const reset=()=>{p.snapshot=null;p.draft=null;p.feedback=[];p.status='安排日期或补读范围已改变，请重新生成草稿。';p.refresh();};
-  new Setting(el).setName('安排哪一天').addDropdown(c=>c.addOption('today','今天').addOption('tomorrow','明天').setValue(p.planTarget).setDisabled(p.busy).onChange(v=>{p.planTarget=v as 'today'|'tomorrow';reset();}));
-  new Setting(el).setName('补读遗漏日记').setDesc('从上次已确认复盘之后读取；无记录时默认最近 7 天，最多 30 天。只在点击开始后读取。').addToggle(c=>c.setValue(p.catchUp).setDisabled(p.busy).onChange(v=>{p.catchUp=v;reset();}));
-  if(p.catchUp){
+  new Setting(el).setName('安排哪一天').addDropdown(c=>{c.selectEl.setAttribute('aria-label','安排哪一天');c.addOption('today','今天').addOption('tomorrow','明天').setValue(p.planTarget).setDisabled(p.busy).onChange(v=>{p.planTarget=v as 'today'|'tomorrow';reset();});});
+  new Setting(el).setName('接续旧日记 TODO').setDesc('先整理最近那篇 TODO：勾选完成、删除不需要的任务并追加新任务。中断几天不表示任务已完成。').addToggle(c=>c.setValue(p.catchUp).setDisabled(p.busy).onChange(v=>{p.catchUp=v;reset();}));
+  if(p.catchUp)new Setting(el).setName('任务来源').addDropdown(c=>{c.selectEl.setAttribute('aria-label','任务来源');c.addOption('latest','最近一份 TODO（默认）').addOption('range','按日期范围合并（高级）').setValue(p.sourceMode).setDisabled(p.busy).onChange(v=>{p.sourceMode=v as 'latest'|'range';reset();});});
+  if(p.catchUp&&p.sourceMode==='latest')el.createEl('p',{text:'优先使用今天的 TODO；今天没有清单时向前查找最近 30 天，只接续最近一份，不混入更早的清单。已勾选项保持完成，无日期的未完成项安排到所选今天／明天。',cls:'rp-muted'});
+  if(p.catchUp&&p.sourceMode==='range'){
    const range=el.createEl('label',{cls:'rp-field'});range.createEl('span',{text:'补读起始日（留空自动判断）'});
    const date=range.createEl('input',{attr:{type:'date','aria-label':'补读起始日',max:today(p.settings.timezone),min:addDay(today(p.settings.timezone),-30)}});
    date.value=p.catchUpFrom;date.disabled=p.busy;date.addEventListener('change',()=>{p.catchUpFrom=date.value;reset();});
@@ -168,10 +170,10 @@ class ReviewView extends ItemView {
   el.createEl('p',{text:'0.1 版独立任务不会自动导入；需要继续的任务请手动放入今天的 Tasks。',cls:'rp-muted'});
   if(p.snapshot) {
    const history=p.snapshot.history;
-   el.createEl('p',{text:`目标：${p.snapshot.targetDay}。读取今天、明日已有安排和跨日清单${history.length?`，补读 ${history[0].day} 至 ${history.at(-1)!.day}`:'；未补读旧日记'}。`,cls:'rp-muted'});
+   el.createEl('p',{text:p.snapshot.sourceMode==='latest'?`目标：${p.snapshot.targetDay}。TODO 来源：${history[0]?.day??p.snapshot.layout.day}；以这份清单的当前内容为准，并核对跨日待办与明日已有安排。`:`目标：${p.snapshot.targetDay}。读取今天、明日已有安排和跨日清单${history.length?`，补读 ${history[0].day} 至 ${history.at(-1)!.day}`:'；未补读旧日记'}。`,cls:'rp-muted'});
    for(const warning of p.snapshot.warnings)el.createEl('p',{text:warning,cls:'rp-hint'});
    if(history.length){
-    const missed=el.createEl('details');missed.open=true;missed.createEl('summary',{text:`遗漏日期共有 ${history.flatMap(n=>n.tasks.filter(t=>!t.done)).length} 项未完成任务`});
+    const missed=el.createEl('details');missed.open=true;missed.createEl('summary',{text:`${p.snapshot.sourceMode==='latest'?'来源 TODO':'补读日记'}共有 ${history.flatMap(n=>n.tasks.filter(t=>!t.done)).length} 项未完成任务`});
     for(const note of history)for(const t of note.tasks.filter(t=>!t.done))missed.createEl('p',{text:`${note.day} · ${t.text}`});
     if(history.every(n=>!n.tasks.some(t=>!t.done)))missed.createEl('p',{text:'所选日期内没有未完成任务。'});
    }
@@ -184,9 +186,9 @@ class ReviewView extends ItemView {
    const next=d.review.decisions.filter(t=>t.action===d.snapshot.target);
    if(!next.length)el.createEl('p',{text:'没有新增任务，已有安排保持原样。',cls:'rp-muted'});
    for(const row of outlinePreview(d.outline)){const line=el.createEl('p',{text:`${row.task?'☐ ':'· '}${row.text}`,cls:'rp-outline-item'});line.style.marginInlineStart=`${row.depth*18}px`;}
-   el.createEl('h3',{text:'跨日清单与其他处理'});
+   el.createEl('h3',{text:'明确另定日期的任务与其他处理'});
    for(const t of d.review.decisions.filter(t=>t.action!==d.snapshot.target)) {
-    const label=t.action==='cancel'?'取消':t.action==='future'?'安排到 '+t.date:p.snapshot?.completed.some(q=>q.id===t.id)?'原条目保持完成，无新增后续':p.snapshot?.queue.tasks.some(q=>q.id===t.id)?'继续保留到 '+t.date:'留在原日记（旧日记任务以后不自动追踪）';
+    const label=t.action==='cancel'?'取消':t.action==='future'?'安排到 '+t.date:p.snapshot?.completed.some(q=>q.id===t.id)?'原条目保持完成，无新增后续':p.snapshot?.queue.tasks.some(q=>q.id===t.id)?'继续保留到 '+t.date:'留在来源日记，本次不安排';
     const task=[...d.snapshot.tasks,...d.snapshot.history.flatMap(n=>n.tasks),...d.snapshot.completed].find(q=>q.id===t.id);
     const parents=task?.parents.map(q=>q.text)??d.snapshot.queue.tasks.find(q=>q.id===t.id)?.ancestry??[];
     el.createEl('p',{text:`${parents.length?parents.join(' › ')+' › ':''}${t.text} — ${label}。${t.reason}`});

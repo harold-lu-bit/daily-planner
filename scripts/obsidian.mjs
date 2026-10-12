@@ -136,7 +136,8 @@ try {
   };
   return {yesterday,path:old.todayPath,text};
  },fixture);
- await page.getByRole('combobox').selectOption('today');
+ await page.getByRole('combobox',{name:'安排哪一天',exact:true}).selectOption('today');
+ await page.getByRole('combobox',{name:'任务来源',exact:true}).selectOption('range');
  await page.getByLabel('补读起始日',{exact:true}).fill(missed.yesterday);
  await page.getByRole('button',{name:'开始复盘',exact:true}).click();await idle();
  await page.getByRole('heading',{name:'今天的安排',exact:true}).waitFor();

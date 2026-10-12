@@ -38,15 +38,15 @@ function fixture() {
 }
 describe('Planning controls and confirmation',()=>{
   it('sends today target, local time and missed-day sources, writes only after explicit acceptance',async()=>{
-    const {plugin,files,calls}=fixture();plugin.planTarget='today';const before=new Map(files);
+    const {plugin,files,calls}=fixture();plugin.planTarget='today';files.set('daily/2026-10-09.md','## Tasks\n');const before=new Map(files);
     await plugin.begin();expect(files).toEqual(before);expect(calls[0].target).toBe('today');expect(calls[0].currentTime).toBe('10:00');
     expect(plugin.snapshot!.history.map(n=>n.day)).toEqual(['2026-10-08']);
-    expect(plugin.draft!.review.decisions).toHaveLength(2);
+    expect(plugin.draft!.review.decisions).toHaveLength(1);expect(calls[0].sourceMode).toBe('latest');
     await plugin.accept();expect(files.get('daily/2026-10-09.md')).toContain('- [ ] 昨天未完');
     expect(files.has('daily/2026-10-10.md')).toBe(false);expect(plugin.draft).toBeNull();
   });
   it('honors the selected lookback range and prevents acceptance with unsubmitted feedback',async()=>{
-    const {plugin,files}=fixture();plugin.catchUpFrom='2026-10-09';await plugin.begin();
+    const {plugin,files}=fixture();plugin.sourceMode='range';plugin.catchUpFrom='2026-10-09';await plugin.begin();
     expect(plugin.snapshot!.history).toHaveLength(0);plugin.device.notes='先调整一下';const before=new Map(files);
     await expect(plugin.accept()).rejects.toThrow('未提交');expect(files).toEqual(before);
   });
