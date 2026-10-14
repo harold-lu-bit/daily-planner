@@ -7,9 +7,9 @@ const dir=path.resolve('.test-runtime');await mkdir(dir,{recursive:true,mode:0o7
 await build({entryPoints:['src/daily.ts','src/provider.ts','src/dialogue.ts'],bundle:true,packages:'external',platform:'node',format:'esm',outdir:dir,logLevel:'silent'});
 const {DailyService,QUEUE_PATH,renderQueue,reviewPayload,reviewInstruction,parseQueue}=await import(pathToFileURL(path.join(dir,'daily.js')).href);
 const {callModel}=await import(pathToFileURL(path.join(dir,'provider.js')).href);
-const {ReplySchema,mergeReply,dialogueInstruction}=await import(pathToFileURL(path.join(dir,'dialogue.js')).href);
+const {modelReplySchema,mergeReply,dialogueInstruction}=await import(pathToFileURL(path.join(dir,'dialogue.js')).href);
 async function reviewCall(payload){
- const r=await callModel(config,env.API_KEY,transport,ReplySchema,reviewInstruction+dialogueInstruction,{...payload,requestMode:'plan'});
+ const r=await callModel(config,env.API_KEY,transport,modelReplySchema(payload.target),reviewInstruction+dialogueInstruction,{...payload,requestMode:'plan'});
  const value=mergeReply(r.value,payload.previous);assert.ok(value,'Expected plan or patch');return {value,usage:r.usage};
 }
 const env=process.env;

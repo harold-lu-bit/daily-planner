@@ -10,9 +10,24 @@ const message=z.string().trim().min(1).max(12000);
 export const ReplySchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('answer'),message}).strict(),
  z.object({kind:z.literal('plan'),message,review:semanticReview}).strict(),
- z.object({kind:z.literal('patch'),message,summary:ReviewSchema.shape.summary,questions:ReviewSchema.shape.questions,upsert:z.array(semanticDecision).max(200),remove:z.array(z.string().min(1).max(100)).max(200)}).strict(),
+ z.object({kind:z.literal('patch'),message,summary:ReviewSchema.shape.summary,questions:ReviewSchema.shape.questions,upsert:z.array(semanticDecision).max(200),remove:z.array(z.string().min(1).max(100)).max(200).default([])}).strict(),
 ]);
 export type Reply=z.infer<typeof ReplySchema>;
+// Resolve only this protocol alias against the user's selected mode. Never infer
+// an action from a date or change dates to make an inconsistent proposal pass.
+export function modelReplySchema(target:'today'|'tomorrow') {
+ return z.preprocess(raw=>{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return raw;
+  const reply=raw as Record<string,unknown>;
+  const decisions=(value:unknown)=>Array.isArray(value)?value.map(d=>d&&typeof d==='object'&&!Array.isArray(d)&&d.action==='target'?{...d,action:target}:d):value;
+  if(reply.kind==='patch')return {...reply,upsert:decisions(reply.upsert)};
+  if(reply.kind==='plan'&&reply.review&&typeof reply.review==='object'&&!Array.isArray(reply.review)){
+   const review=reply.review as Record<string,unknown>;
+   return {...reply,review:{...review,decisions:decisions(review.decisions)}};
+  }
+  return raw;
+ },ReplySchema);
+}
 export interface Turn {role:'user'|'assistant'|'validator';content:string;}
 export function restoreDialogue(saved:unknown,day:string):{turns:Turn[];feedback:string[];target:'today'|'tomorrow'}|null{
  const record=z.object({sourceDay:z.string().optional(),acceptedAt:z.string().optional(),planTarget:z.enum(['today','tomorrow']).optional(),feedback:z.array(z.string().max(10000)).max(500).default([]),turns:z.array(z.object({role:z.enum(['user','assistant','validator']),content:z.string().max(30000)})).max(500).default([])}).parse(saved);
@@ -39,6 +54,6 @@ export const dialogueInstruction=`
 1. {"kind":"answer","message":"正常解释或澄清，可分段，不必重发全部任务"}
 2. {"kind":"plan","message":"说明本次提案","review":完整Review}
 3. {"kind":"patch","message":"说明变化","summary":"更新后总结","questions":["全部尚未解决的问题"],"upsert":[完整decision],"remove":["要移除的尚未写入new:N"]}。
-有 previous 时优先 patch，只发送变化的决策；其余决策由程序原样保留。原始输入 ID 不得 remove；取消应 upsert action=cancel。新增编号不能与 previous 的 new:N 冲突，修改既有新增项沿用原编号。原文修改后重新读取，会作废旧 patch 基础。
-每个 decision 必须增加 timing、timeSpecified、category：timing=asap 表示尽快安排到 targetDate；explicit 表示用户指定/原文或队列已有明确安排；hold 表示用户明确暂不安排或保留尚未到期的队列；none 用于完成项无后续或取消。timeSpecified 表示用户是否指定时刻，为 false 时 start/end 必须 null；category 为 task/event/reminder。你负责理解日期、时间、指代、否定、最新意见、拆分和背景日期，程序不会用正则重新解释原文或覆盖你给出的日期。
+有 previous 时优先 patch，只发送变化的决策；其余决策由程序原样保留。upsert 内每个 decision 从 previous 复制，只有用户要求改变的字段及其必要说明才更新，不顺便添加截止日、时刻或改写标题。remove 没有删除时为 []，省略也视为不删除。原始输入 ID 不得 remove；取消应 upsert action=cancel。新增编号不能与 previous 的 new:N 冲突，修改既有新增项沿用原编号。原文修改后重新读取，会作废旧 patch 基础。
+每个 decision 必须增加 timing、timeSpecified、category：timing=asap 表示尽快安排到 targetDate；explicit 表示用户指定/原文或队列已有明确安排（尚未到期的队列保持原日期时允许 keep+explicit）；hold 表示用户明确暂不安排或保留尚未到期的队列；none 用于完成项无后续或取消。timeSpecified 表示用户是否指定时刻，为 false 时 start/end 必须 null；category 为 task/event/reminder。你负责理解日期、时间、指代、否定、最新意见、拆分和背景日期，程序不会用正则重新解释原文或覆盖你给出的日期。
 请自查每项独立安排是否有去向，但不要为背景日期或截止日期生成多余任务。scheduleEvidence 可选，引用用于解释；提供时必须是对应任务（含祖先）或用户消息的逐字片段，不要求包含完整标题或可匹配的日期格式。遇到校验失败，使用 previousProcessing 和 validator 消息修正；不重复声称已完成修正或写入。所有 plan/patch 都只是待用户确认的预览。`;

@@ -8,6 +8,11 @@ it('records request and malformed/truncated response before validation without h
 });
 const config:ProviderConfig={baseUrl:'https://example.com/plan/v1',model:'test-model',format:'json_object',timeout:5,maxTokens:1000};
 const schema=z.object({ok:z.literal(true)}).strict();
+it('reports allowed enum values without echoing the invalid value or secret',async()=>{
+ const actionSchema=z.object({action:z.enum(['today','tomorrow','future','keep','cancel'])});
+ await expect(callModel(config,'test-secret',async()=>({status:200,json:{choices:[{message:{content:'{"action":"test-secret private-note"}'}}]}}),actionSchema,'',{})).rejects.toThrow('允许值 today | tomorrow | future | keep | cancel');
+ try{await callModel(config,'test-secret',async()=>({status:200,json:{choices:[{message:{content:'{"action":"test-secret private-note"}'}}]}}),actionSchema,'',{});}catch(e){expect(String(e)).not.toMatch(/test-secret|private-note/);}
+});
 it('追加唯一接口路径',()=>{expect(endpoint(config.baseUrl)).toBe('https://example.com/plan/v1/chat/completions');expect(()=>endpoint(config.baseUrl+'/chat/completions')).toThrow();expect(()=>endpoint('https://user:key@example.com')).toThrow();});
 it('严格结构化成功，记录 usage',async()=>{const r=await callModel(config,'test-secret',async(url,body,key)=>{expect(url).toBe(endpoint(config.baseUrl));expect(key).toBe('test-secret');expect(JSON.parse(body).response_format.type).toBe('json_object');return {status:200,json:{choices:[{message:{content:'{"ok":true}'}}],usage:{prompt_tokens:10,completion_tokens:5}}};},schema,'',{});expect(r).toEqual({value:{ok:true},usage:{input:10,output:5}});});
 it('网络错误不会回显凭据或请求正文',async()=>{await expect(callModel(config,'test-secret',async()=>{throw new Error('test-secret sensitive-body');},schema,'',{})).rejects.toThrow('网络');});

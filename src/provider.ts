@@ -22,7 +22,7 @@ export function endpoint(base:string): string {
 }
 export const PLAN_FORMAT={date:'YYYY-MM-DD',outcomes:['1–3 个结果'],items:[{id:'必须原样使用输入任务的 UUID',action:'schedule 或 defer',minutes:30,start:'HH:mm 或 null',reason:'理由'}],uncertainties:['待确认事项，可空数组']};
 export const EXTRACT_FORMAT={title:'简洁任务标题',priority:'high 或 normal 或 low',minutes:30,project:null,due:null,uncertainties:['不确定的时间或项目']};
-export async function callModel<T>(config:ProviderConfig,key:string,transport:Transport,schema:z.ZodType<T>,instruction:string,data:unknown,trace?:(event:ModelTrace)=>Promise<void>):Promise<{value:T;usage:Usage}> {
+export async function callModel<T>(config:ProviderConfig,key:string,transport:Transport,schema:z.ZodType<T,z.ZodTypeDef,unknown>,instruction:string,data:unknown,trace?:(event:ModelTrace)=>Promise<void>):Promise<{value:T;usage:Usage}> {
   if(!key || !config.model.trim()) throw new Error('请先配置模型与本机 API 密钥');
   const url=endpoint(config.baseUrl);
   if(!Number.isFinite(config.timeout)||config.timeout<5||config.timeout>300 || !Number.isInteger(config.maxTokens)||config.maxTokens<256||config.maxTokens>32768) throw new Error('超时应为 5–300 秒；输出上限应为 256–32768 token');
@@ -48,7 +48,7 @@ export async function callModel<T>(config:ProviderConfig,key:string,transport:Tr
     const value=schema.parse(JSON.parse(choice.message.content));
     return {value,usage};
   } catch(e) {
-    const detail=e instanceof z.ZodError?e.issues.slice(0,8).map(i=>`${i.path.join('.')||'根对象'}: ${i.code}`).join('；'):'JSON 解析失败或正文缺失';
+    const detail=e instanceof z.ZodError?e.issues.slice(0,8).map(i=>`${i.path.join('.')||'根对象'}: ${i.code}${i.code==='invalid_enum_value'||i.code==='invalid_union_discriminator'?`；允许值 ${i.options.join(' | ')}`:''}`).join('；'):'JSON 解析失败或正文缺失';
     throw new Error(`模型输出未通过结构校验；${detail}。没有写入计划，请修正输出后重试`);
   }
 }

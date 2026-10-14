@@ -6,7 +6,7 @@ import { ObsidianStore } from './store';
 import { z } from 'zod';
 import type Moment from 'moment';
 import {ConversationArchive,type ConversationRecord} from './conversation';
-import {ReplySchema,mergeReply,dialogueInstruction,restoreDialogue,type Reply,type Turn} from './dialogue';
+import {modelReplySchema,mergeReply,dialogueInstruction,restoreDialogue,type Reply,type Turn} from './dialogue';
 const dateMoment=moment as unknown as typeof Moment;
 const VIEW='research-planner-view';
 interface Settings extends ProviderConfig {secretName:string; reminder:string; dailyCallLimit:number; timezone:string; heading:string;}
@@ -170,7 +170,7 @@ export default class ResearchPlanner extends Plugin {
    if(!payload.tasks.length&&!payload.completed.length&&!payload.future.length&&!feedback.length)reply={kind:'plan',message:'本次没有待安排任务。',review:{summary:'已有安排保持原样。',decisions:[],questions:[]}};
    else{
     try{
-     const r=await callModel(this.settings,this.reserve(),this.transport,ReplySchema,reviewInstruction+dialogueInstruction,payload,async event=>{
+     const r=await callModel(this.settings,this.reserve(),this.transport,modelReplySchema(snapshot.target),reviewInstruction+dialogueInstruction,payload,async event=>{
       if(event.stage==='request')record.request=event.payload;else record.response=event;
       await this.saveRecord(record);
      });this.usage(r.usage);reply=r.value;

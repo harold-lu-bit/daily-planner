@@ -1,6 +1,6 @@
 # 从仓库部署到 Obsidian Vault
 
-适用于 Research Planner 0.3.5。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
+适用于 Research Planner 0.3.6。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
 
 ## 给 Agent 的部署任务
 

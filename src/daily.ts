@@ -146,7 +146,7 @@ function withoutTaskMarkers(raw:string,heading:string):string {
 }
 function textOf(t:z.infer<typeof FutureSchema>|Decision):string {
   const time=t.start?(t.end?`${t.start} - ${t.end} `:`${t.start} `):'';
-  return `${time}${t.text}${t.priority==='high'?'（优先）':''}${t.deadline?` 📅 ${t.deadline}`:''}`;
+  return `${time}${t.text}${t.priority==='high'&&!/[（(]优先[）)]$/.test(t.text)?'（优先）':''}${t.deadline?` 📅 ${t.deadline}`:''}`;
 }
 export function renderQueue(q:Queue):string {
   QueueSchema.parse(q);
@@ -255,10 +255,12 @@ export const reviewInstruction = `你是个人科研规划助手，负责理解�
 输入 today/currentTime/timezone 是本次时间，targetDate 是用户选择安排的日期。sourceDay 是原文日期，原文的相对日期以它为参照，用户本轮意见以 today 为参照。跨月跨年按自然语言上下文推理；真正有歧义再询问，不要因未匹配某种写法而要求改写。
 用户偏好：没有明确安排日期表示尽快完成，安排到 targetDate；不能因为任务多、优先级或负荷而延期。区分安排、截止、活动、准备、提醒和历史背景日期。截止日不等于开始日。无指定时刻不编造时间块。未来分组无具体日期时澄清，不擅自塞进今天；明确的未来活动不能提前。过期队列默认接续到目标日，用户明确暂缓则保留。
 sourceMode=latest 时 authoritativeTodoDay 的当前清单为准；已复盘或漏做多天都不表示完成。你只能规划 tasks、future、completed 中明确的后续，以及用户对话明确新增的任务。daily 和 sourceNotes 的其他章节仅作背景，不能自行扩张任务范围。已完成原条目不恢复成未完成；不存在明确后续时 keep/date=null。不能从历史记录复活用户删除的任务。
-每个输入 tasks/completed/future ID 必须有且仅有一个处置。原层级和顺序由代码保留。多日活动或多个提醒可拆分：原 ID 保留一项，新增用 new:N 并关联 sourceTaskId；不要为所有日期机械建任务。新增一般只来自用户明确意见或来源任务的拆分。tomorrowExisting 保持原样；当前写入范围不支持更改它时向用户说明。
-Review={summary:日记用简短总结,decisions:[decision],questions:[真正未解决的问题]}。
+completed 的勾选适用于整条原任务：例如 [x] 明天提交报告，即使“明天”恰好是 targetDate，也表示这件事已经完成，必须 keep，而不是重新安排。日期词本身不是后续工作。只有原文另行明确了尚未完成的剩余工作或再次执行要求，且未在 tasks/future 中重复，才可提取那部分后续；已完成的原工作及其链接仍留在原日记。不要仅因原句包含未来日期、继续等词就重做已勾选事项。
+每个输入 tasks/completed/future ID 必须有且仅有一个处置。原层级和顺序由代码保留。队列每条只能登记一个执行日期，不支持日期范围：真正跨多个日期的活动、分别执行的工作或提醒必须为各个实际日期建立独立条目，不能只把其余日期写在标题或 reason 中，否则那些日期不会进入日程。原 ID 保留一项，新增用 new:N 并关联 sourceTaskId。仅有持续时长而未指定逐日安排的工作可从目标日开始；背景日期、截止日期不机械拆成活动。保留全天、上午等限定，但不凭空转换成具体钟点。新增一般只来自用户明确意见或来源任务的拆分。tomorrowExisting 保持原样；当前写入范围不支持更改它时向用户说明。
+Review={summary:日记用简短总结,decisions:[decision],questions:[必须得到答案才能安全安排的问题]}。questions 会阻止用户接受整个计划，只用于影响日期、任务范围等且不能依据已知偏好决定的歧义；可选优化建议放在 message，不要当成待确认问题。学习、试用观察等持续多天的工作也可从目标日开始，不表示承诺当天全部完成，不必询问是否改为跨日跟踪。
 decision={id,action,text,date,deadline,start,end,priority,reason,timing,timeSpecified,category}；id 原样引用输入或 new:N；action 是 today/tomorrow/future/keep/cancel；text 普通单行任务标题，不嵌入 checkbox、HTML 注释或元数据；date/deadline 为有效 YYYY-MM-DD 或 null；start/end 为 HH:mm 或 null；priority=normal/high；reason 说明依据。可选 sourceTaskId 仅用于新增拆分；scheduleEvidence={source:task/feedback,quote:逐字来源片段} 是可选解释证据。
-安排到 targetDate 时 action=target；future 日期必须晚于 targetDate；keep 对原日记 date=null，对队列 date 保持原值；cancel/date=null。保留、取消、改期均应符合用户意图。只提出预览，不声称已写入。不可虚构进展或声称读过未提供文件。
+保留任务原有目标、链接、注意事项和具体要求，不为了短标题而删掉。拆分时将相关说明保留在对应条目的 text 中，例如参会还要观察某种汇报方法，这个要求不能缩写丢失。可以把日期、时刻、优先标记移到专用字段，不能将执行细节只写在 reason 中（reason 不会写入未来任务正文）。
+安排到 targetDate 时：输入 target 为 "today" 就输出 action:"today"，输入 target 为 "tomorrow" 就输出 action:"tomorrow"。target 是输入字段名，不要把变量名当作 action 字面量。示例：target="today"、targetDate="2026-10-14" 时，决策使用 {"action":"today","date":"2026-10-14"}。future 日期必须晚于 targetDate；keep 对原日记 date=null，对队列 date 保持原值；cancel/date=null。保留、取消、改期均应符合用户意图。只提出预览，不声称已写入。不可虚构进展或声称读过未提供文件。
 previous 是当前有效草稿，previousProcessing 是最近提议的校验结果；明确指出缺失上下文或校验错误，不自行宣称它们已解决。存在影响计划的歧义时用 questions 或对话澄清。用户最新明确意见优先于先前意见和原安排；历史模型建议只有被用户接受才成为要求。`;
 export class DailyService {
   constructor(public store:Store,private layout:(day:string)=>Promise<Layout>,private format:(day:string,pattern:string)=>string=(day,pattern)=>pattern.replaceAll('YYYY',day.slice(0,4)).replaceAll('MM',day.slice(5,7)).replaceAll('DD',day.slice(8,10))) {}
@@ -352,7 +354,7 @@ export class DailyService {
       const scheduled=['today','tomorrow','future'].includes(d.action);
       if(d.timing==='asap'&&(!scheduled||d.action!==snapshot.target||d.date!==next))throw new Error(`${d.id}: timing=asap 必须安排到 ${next}，不能因任务量延期`);
       if(d.timing&&scheduled&&!['asap','explicit'].includes(d.timing))throw new Error(`${d.id}: 已安排任务 timing 必须为 asap 或 explicit`);
-      if(d.timing&&d.action==='keep'&&!['hold','none'].includes(d.timing))throw new Error(`${d.id}: keep 需要 hold 或 none 分类`);
+      if(d.timing&&d.action==='keep'&&!['hold','none'].includes(d.timing)&&!(d.timing==='explicit'&&future&&future.date>next))throw new Error(`${d.id}: keep 需要 hold 或 none；尚未到期且保持原日期的跨日任务也可用 explicit`);
       if(d.timing==='none'&&d.action==='keep'&&!completed)throw new Error(`${d.id}: 未完成任务暂不安排需要 timing=hold`);
       if(d.timing&&d.action==='cancel'&&d.timing!=='none')throw new Error(`${d.id}: cancel 需要 timing=none`);
       if(d.action==='keep'&&!future&&d.date!==null)throw new Error(`${d.id}: 留在原日记的任务 date 必须为 null`);

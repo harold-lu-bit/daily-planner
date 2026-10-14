@@ -38,6 +38,19 @@ function fixture() {
   return {plugin,files,calls};
 }
 describe('Planning controls and confirmation',()=>{
+  it.each(['today','tomorrow'] as const)('accepts the target alias in %s mode but still rejects mismatched dates',async target=>{
+    const {plugin,files}=fixture();plugin.planTarget=target;
+    const control=plugin as unknown as {transport:Transport},normal=control.transport;
+    control.transport=async(url,body,key)=>{
+      const response=await normal(url,body,key),json=response.json as {choices:{message:{content:string}}[]};
+      const reply=JSON.parse(json.choices[0].message.content);reply.review.decisions.forEach((d:{action:string})=>d.action='target');
+      json.choices[0].message.content=JSON.stringify(reply);return response;
+    };
+    const before=new Map(files);await plugin.begin();expect(plugin.draft!.review.decisions.every(d=>d.action===target)).toBe(true);expect(files).toEqual(before);
+    const aliasTransport=control.transport;
+    control.transport=async(url,body,key)=>{const response=await aliasTransport(url,body,key),json=response.json as {choices:{message:{content:string}}[]};const reply=JSON.parse(json.choices[0].message.content);reply.review.decisions[0].date='2026-10-20';json.choices[0].message.content=JSON.stringify(reply);return response;};
+    await expect(plugin.retry()).rejects.toThrow('目标任务日期错误');expect(plugin.draftStale).toBe(true);expect(files).toEqual(before);
+  });
   it('answers in explain mode without replacing the valid draft and includes dialogue in later turns',async()=>{
     const {plugin,calls,files}=fixture();await plugin.begin();const old=plugin.draft,before=new Map(files),control=plugin as unknown as {transport:Transport},normal=control.transport;
     control.transport=async()=>({status:200,json:{choices:[{message:{content:JSON.stringify({kind:'answer',message:'可以选择提前一天提醒，也可以当日提醒。'})}}]}});

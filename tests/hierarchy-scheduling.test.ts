@@ -62,6 +62,23 @@ describe('Task hierarchy survives scheduling',()=>{
 });
 
 describe('Model semantics with deterministic write validation',()=>{
+ it('keeps a dated future queue item with explicit timing, but not an overdue item without hold',async()=>{
+  const {service,files}=fixture('## Tasks\n- [ ] 下周活动\n');
+  const s=await service.snapshot(day),r=review(s);Object.assign(r.decisions[0],{action:'future',date:'2026-10-12',timing:'explicit'});
+  await service.apply(service.draft(s,r,false),async()=>{});
+  const queued=await service.snapshot('2026-10-10'),keep=review(queued);
+  Object.assign(keep.decisions[0],{action:'keep',date:'2026-10-12',timing:'explicit'});
+  expect(service.draft(queued,keep,false).review.decisions[0].date).toBe('2026-10-12');
+  const overdue=await service.snapshot('2026-10-12'),late=review(overdue);Object.assign(late.decisions[0],{action:'keep',date:'2026-10-12',timing:'explicit'});
+  expect(()=>service.draft(overdue,late,false)).toThrow('keep 需要');
+  Object.assign(late.decisions[0],{timing:'hold'});expect(()=>service.draft(overdue,late,false)).not.toThrow();
+ });
+ it('renders a priority marker once while retaining deadlines and parent hierarchy',async()=>{
+  const {service}=fixture('## Tasks\n- [ ] 项目（优先）\n  - [ ] 步骤\n');const s=await service.snapshot(day),r=review(s);
+  Object.assign(r.decisions[0],{priority:'high',deadline:'2026-10-20'});
+  const out=service.draft(s,r,false).changes.find(c=>c.path===path('2026-10-10'))!.after!;
+  expect(out).toContain('- [ ] 项目（优先） 📅 2026-10-20\n    - [ ] 步骤');expect(out).not.toContain('（优先）（优先）');
+ });
  it.each(['下个月最后一个工作日前一天提醒','收到邀请后下周再处理','23号分享，21号准备，20号提醒','月底再说，不是今天'])('preserves a model-resolved date without matching grammar: %s',async text=>{
   const {service}=fixture(`## Tasks\n- [ ] ${text}\n`),s=await service.snapshot(day),r=review(s);
   Object.assign(r.decisions[0],{timing:'explicit',action:'future',date:'2026-11-27',timeSpecified:true,start:'13:30',end:null});

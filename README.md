@@ -1,4 +1,4 @@
-# Research Planner 0.3.5
+# Research Planner 0.3.6
 
 直接在 Obsidian 日记里记任务，手动选择安排今天或明天，接续最近一份手动整理的 TODO，通过自然语言调整，确认后写入。只有主动生成、发送意见、询问解释或测试连接才调用模型；后台不扫描、不调用模型。安装后不需要 Python、Node.js 或 WSL。
 
