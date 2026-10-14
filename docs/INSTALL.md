@@ -1,6 +1,6 @@
 # 从仓库部署到 Obsidian Vault
 
-适用于 Research Planner 0.3.3。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
+适用于 Research Planner 0.3.4。公开仓库名是 `daily-planner`，插件 ID 和安装目录名仍为 **`research-planner`**。推荐从 GitHub Release 通过 BRAT 安装和更新；插件本身不依赖 BRAT 运行，手工安装也是可选方式。不需要原 Windows 工作空间、迁移压缩包、WSL 或 Python 后台服务。部署请求授权安装；日程写入仍由用户在面板接受草稿。
 
 ## 给 Agent 的部署任务
 
@@ -31,6 +31,16 @@ BRAT 安装时会重新序列化 manifest.json，空白/缩进可能与 Release 
 
 BRAT 不可用时，可从 Release 下载独立的 `main.js`、`manifest.json`、`styles.css` 和 `SHA256SUMS.txt`，核验后按第 2 节安装。这是手工 Release 安装，后续不会自动更新；不要误报为 BRAT 已配置。发布和维护流程见 [RELEASING.md](RELEASING.md)。
 
+## 会话记录与升级排错（0.3.4 起）
+
+规划面板中的“会话记录 / 复制”可选择历史请求，查看并复制完整 JSON。记录包含当次发送的系统要求和任务上下文、全部反馈、原始模型正文、最终决策、本地警告和错误。截断或结构校验失败也保留已收到的正文，方便区分模型错误与插件改写。
+
+记录自动保存在 `<Vault>/<配置目录>/plugins/research-planner/conversations-<设备标识>/`，每次请求一个带时间戳的文件，重启后仍可读取。没有自动删除期限；需要清理时先备份，再手动删除明确选中的记录文件。不要删除整个插件目录来清理记录。若保存失败，面板会提示，当前记录仍可复制。
+
+记录包含私人任务，不包含 API 密钥、Authorization 请求头或模型推理正文。是否跨设备同步取决于用户对隐藏配置目录的同步/备份规则，插件不改变这些规则。Agent 排错时只读取相关记录，绝不能把真实会话、data.json、备份打包或提交到公共仓库。
+
+历史记录用于查看与排错，不恢复为可直接接受的草稿。重新加载后应重新读取日记生成计划。升级前如仍有旧版未保存会话，先保全反馈和预览；0.3.3 及以前不保存完整历史，无法事后恢复原始回复。新设备的记录目录独立，面板默认列出本设备的记录。
+
 ## 1. 可选：从源码获取并构建
 
 需要 Git、Node.js 22（原生 Windows / macOS / Linux 均可）与随附的 npm。Obsidian 最低版本以 `manifest.json` 为准，目前是 1.13.0，需要 SecretStorage 支持。安装后运行插件不需要 Node.js。
@@ -57,7 +67,7 @@ npm run build
 2. 检查当前插件的 manifest、Daily Notes 设置及模板路径。如果插件已安装，先关闭 Research Planner 或退出 Obsidian，避免运行中的旧代码与新文件混用。
 3. 将已存在的 `main.js`、`manifest.json`、`styles.css` 备份到 Vault 外带时间戳的目录。若要调整配置，另备份将改的具体配置；不要复制整个 `.obsidian`，不要把备份放进 Git。
 4. 将三个发布文件复制到 `<Vault>/<配置目录>/plugins/research-planner/`，缺少目录则创建。保留现有 `data.json`、其他插件、主题和 LiveSync 配置。不要将整个仓库复制进去。
-5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本与所选 Release 一致（当前 0.3.3）。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
+5. 比较源与目标三个文件的 SHA-256，确认 manifest 的 ID 为 `research-planner`、版本与所选 Release 一致（当前 0.3.4）。Windows 可用 `Get-FileHash -Algorithm SHA256`，Linux 用 `sha256sum`，macOS 用 `shasum -a 256`。
 6. 在 Obsidian 社区插件设置中允许社区插件并启用 Research Planner。升级时重新启用或重启应用。磁盘文件一致只证明安装成功，仍需确认应用实际加载成功。
 
 若复制中途失败，恢复本次已替换的发布文件；如果期间出现人工修改，则先核对，不覆盖新编辑。不要为了安装而删除已有插件数据或重建同步数据库。

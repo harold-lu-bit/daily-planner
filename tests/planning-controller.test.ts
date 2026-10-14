@@ -38,6 +38,28 @@ function fixture() {
   return {plugin,files,calls};
 }
 describe('Planning controls and confirmation',()=>{
+  it('returns raw proposals and local corrections to the next iteration and archives both',async()=>{
+    const {plugin,calls,files}=fixture();
+    const control=plugin as unknown as {transport:Transport},normal=control.transport;
+    control.transport=async(url,body,key)=>{
+      const response=await normal(url,body,key),json=response.json as {choices:{message:{content:string}}[]};
+      const r=JSON.parse(json.choices[0].message.content);r.decisions[0].action='future';r.decisions[0].date='2026-10-20';
+      json.choices[0].message.content=JSON.stringify(r);return response;
+    };
+    const before=new Map(files);await plugin.begin();
+    expect(plugin.diagnostics!.rawReview!.decisions[0].date).toBe('2026-10-20');
+    expect(plugin.draft!.review.decisions[0].date).toBe('2026-10-10');
+    expect(plugin.lastRecord!.request).toBeDefined();expect(plugin.lastRecord!.response).toBeDefined();expect(plugin.lastRecord!.result).toBeDefined();
+    plugin.device.notes='为什么日期不对？';await plugin.iterate();
+    expect(JSON.stringify(calls.at(-1)!.previousProcessing)).toContain('本地规则改写');expect(files).toEqual(before);
+  });
+  it('saves validation failures and sends the failed output and error on retry',async()=>{
+    const {plugin,calls}=fixture(),control=plugin as unknown as {transport:Transport},normal=control.transport;
+    control.transport=async()=>({status:200,json:{choices:[{message:{content:'{"broken":"synthetic"}'}}]}});
+    plugin.device.notes='活动按18号安排';await expect(plugin.begin()).rejects.toThrow('结构校验');
+    expect(plugin.lastRecord!.feedback).toEqual(['活动按18号安排']);expect(plugin.lastRecord!.error).toContain('结构校验');
+    control.transport=normal;await plugin.retry();expect(JSON.stringify(calls.at(-1)!.previousProcessing)).toContain('broken');
+  });
   it('保留重读失败前的预览，但禁止接受；成功重试后才恢复写入',async()=>{
     const {plugin,files}=fixture();await plugin.begin();const old=plugin.draft;
     const control=plugin as unknown as {transport:Transport},success=control.transport;

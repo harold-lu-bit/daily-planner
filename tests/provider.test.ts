@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { callModel, endpoint, TruncatedOutputError, type ProviderConfig } from '../src/provider';
+it('records request and malformed/truncated response before validation without headers, key or reasoning text',async()=>{
+ const traces:unknown[]=[];
+ await expect(callModel(config,'test-secret',async()=>({status:200,json:{choices:[{finish_reason:'length',message:{content:'partial test-secret',reasoning_content:'hidden-reasoning'}}]}}),schema,'instruction',{tasks:['synthetic']},async e=>{traces.push(e);})).rejects.toThrow('截断');
+ expect(traces).toHaveLength(2);expect(JSON.stringify(traces)).toContain('partial [REDACTED]');expect(JSON.stringify(traces)).not.toMatch(/test-secret|Authorization|hidden-reasoning/);
+});
 const config:ProviderConfig={baseUrl:'https://example.com/plan/v1',model:'test-model',format:'json_object',timeout:5,maxTokens:1000};
 const schema=z.object({ok:z.literal(true)}).strict();
 it('追加唯一接口路径',()=>{expect(endpoint(config.baseUrl)).toBe('https://example.com/plan/v1/chat/completions');expect(()=>endpoint(config.baseUrl+'/chat/completions')).toThrow();expect(()=>endpoint('https://user:key@example.com')).toThrow();});
