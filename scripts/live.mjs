@@ -4,9 +4,14 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 const dir=path.resolve('.test-runtime');await mkdir(dir,{recursive:true,mode:0o700});await chmod(dir,0o700);
-await build({entryPoints:['src/daily.ts','src/provider.ts'],bundle:true,packages:'external',platform:'node',format:'esm',outdir:dir,logLevel:'silent'});
-const {DailyService,QUEUE_PATH,renderQueue,reviewPayload,ReviewSchema,reviewInstruction,parseQueue}=await import(pathToFileURL(path.join(dir,'daily.js')).href);
+await build({entryPoints:['src/daily.ts','src/provider.ts','src/dialogue.ts'],bundle:true,packages:'external',platform:'node',format:'esm',outdir:dir,logLevel:'silent'});
+const {DailyService,QUEUE_PATH,renderQueue,reviewPayload,reviewInstruction,parseQueue}=await import(pathToFileURL(path.join(dir,'daily.js')).href);
 const {callModel}=await import(pathToFileURL(path.join(dir,'provider.js')).href);
+const {ReplySchema,mergeReply,dialogueInstruction}=await import(pathToFileURL(path.join(dir,'dialogue.js')).href);
+async function reviewCall(payload){
+ const r=await callModel(config,env.API_KEY,transport,ReplySchema,reviewInstruction+dialogueInstruction,{...payload,requestMode:'plan'});
+ const value=mergeReply(r.value,payload.previous);assert.ok(value,'Expected plan or patch');return {value,usage:r.usage};
+}
 const env=process.env;
 if(!env.API_BASE_URL||!env.API_KEY||!env.MODEL_NAME)throw new Error('Set API_BASE_URL, API_KEY and MODEL_NAME in the process environment; never commit credentials');
 const config={baseUrl:env.API_BASE_URL,model:env.MODEL_NAME,format:'json_object',timeout:120,maxTokens:8192};
@@ -24,11 +29,11 @@ const version=JSON.parse(await readFile('manifest.json','utf8')).version;
 const started=Date.now(),report={date:new Date().toISOString(),version,scope:'Legacy daily review, iteration and checked-task follow-up regression; no real Vault; catch-up/today not covered by this script',checks:[]};
 try{
  const snapshot=await service.snapshot('2026-10-05');const before=new Map(files);
- const first=await callModel(config,env.API_KEY,transport,ReviewSchema,reviewInstruction,reviewPayload(snapshot,[],null));
+ const first=await reviewCall(reviewPayload(snapshot,[],null));
  service.draft(snapshot,first.value,false);assert.deepEqual(files,before);
  report.checks.push({name:'initial daily-only review: complete IDs, no writes',passed:true,usage:first.usage});
  const feedback=['不用联系学长了，设备已经会用了。组会改到 15:00 到 16:00。明天优先分析数据，不用排具体时间。周四（10月8日）提醒我准备周报材料，周五（10月9日）提交周报。培训保持原样。'];
- const second=await callModel(config,env.API_KEY,transport,ReviewSchema,reviewInstruction,reviewPayload(snapshot,feedback,first.value));
+ const second=await reviewCall(reviewPayload(snapshot,feedback,first.value));
  assert.equal(second.value.questions.length,0);
  const d=service.draft(snapshot,second.value,true,feedback);await service.apply(d,async()=>{});
  const queue=parseQueue(files.get(QUEUE_PATH));
@@ -44,7 +49,7 @@ try{
  const completedText='## Tasks\n- [x] 今天完成初步调试，后续10月9日继续验证稳定性\n- [x] 初稿完成，明天补充实验结果\n- [x] 已发送报告\n- [x] 10月9日的实验已经提前做完，没有后续\n- [x] 今日测试结束\n  后续10月10日补测低温条件\n';
  files.set('daily/2026-10-05.md',completedText);files.set('daily/2026-10-06.md','## Tasks\n');
  const completedSnapshot=await service.snapshot('2026-10-05');
- const completedResult=await callModel(config,env.API_KEY,transport,ReviewSchema,reviewInstruction,reviewPayload(completedSnapshot,[],null));
+ const completedResult=await reviewCall(reviewPayload(completedSnapshot,[],null));
  assert.equal(completedResult.value.questions.length,0);
  const decisions=completedResult.value.decisions;
  const forSource=(fragment)=>decisions.find(d=>d.id===completedSnapshot.completed.find(t=>t.text.includes(fragment)).id);

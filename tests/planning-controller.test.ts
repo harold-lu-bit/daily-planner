@@ -31,27 +31,50 @@ function fixture() {
   const calls:Record<string,unknown>[]=[];
   const transport:Transport=async(_url,body)=>{
     const data=JSON.parse(JSON.parse(body).messages[1].content);calls.push(data);
-    const result:Review={summary:'安排剩余工作。',questions:[],decisions:data.tasks.map((t:{id:string;text:string})=>({id:t.id,text:t.text,action:data.target,date:data.targetDate,deadline:null,start:null,end:null,priority:'normal',reason:'接续'}))};
-    return {status:200,json:{choices:[{message:{content:JSON.stringify(result)}}]}};
+    const result:Review={summary:'安排剩余工作。',questions:[],decisions:data.tasks.map((t:{id:string;text:string})=>({id:t.id,text:t.text,action:data.target,date:data.targetDate,deadline:null,start:null,end:null,priority:'normal',reason:'接续',timing:'asap',timeSpecified:false,category:'task'}))};
+    return {status:200,json:{choices:[{message:{content:JSON.stringify({kind:'plan',message:'计划提案',review:result})}}]}};
   };
   (plugin as unknown as {transport:Transport}).transport=transport;
   return {plugin,files,calls};
 }
 describe('Planning controls and confirmation',()=>{
-  it('returns raw proposals and local corrections to the next iteration and archives both',async()=>{
+  it('answers in explain mode without replacing the valid draft and includes dialogue in later turns',async()=>{
+    const {plugin,calls,files}=fixture();await plugin.begin();const old=plugin.draft,before=new Map(files),control=plugin as unknown as {transport:Transport},normal=control.transport;
+    control.transport=async()=>({status:200,json:{choices:[{message:{content:JSON.stringify({kind:'answer',message:'可以选择提前一天提醒，也可以当日提醒。'})}}]}});
+    plugin.device.notes='为什么这样安排？';await plugin.explain();expect(plugin.draft).toBe(old);expect(plugin.draftStale).toBe(false);expect(files).toEqual(before);
+    control.transport=normal;plugin.device.notes='按你说的第一种做';await plugin.iterate();
+    expect(JSON.stringify(calls.at(-1)!.conversation)).toContain('可以选择提前一天');expect(calls.at(-1)!.requestMode).toBe('auto');expect(plugin.lastRecord!.turns!.some(t=>t.role==='assistant')).toBe(true);
+  });
+  it('refuses plan changes during explicit explanation, preserving the draft',async()=>{
+    const {plugin}=fixture();await plugin.begin();const old=plugin.draft;plugin.device.notes='只解释';
+    await expect(plugin.explain()).rejects.toThrow('本次只解释');expect(plugin.draft).toBe(old);expect(plugin.draftStale).toBe(false);
+  });
+  it('applies a one-task patch and preserves the other task, without writing notes',async()=>{
+    const {plugin,files}=fixture();files.set('daily/2026-10-09.md','## Tasks\n- [ ] 任务甲\n- [ ] 任务乙\n');await plugin.begin();
+    const original=plugin.draft!.review.decisions,before=new Map(files);
+    (plugin as unknown as {transport:Transport}).transport=async()=>({status:200,json:{choices:[{message:{content:JSON.stringify({kind:'patch',message:'只改任务甲',summary:'调整后',questions:[],upsert:[{...original[0],text:'任务甲修改'}],remove:[]})}}]}});
+    plugin.device.notes='只改第一项';await plugin.iterate();expect(plugin.draft!.review.decisions[1]).toEqual(original[1]);expect(plugin.draft!.review.decisions[0].text).toBe('任务甲修改');expect(files).toEqual(before);
+  });
+  it('does not auto-retry structural failures, but the explicit retry sees their diagnostics',async()=>{
+    const {plugin,calls}=fixture();let n=0;const control=plugin as unknown as {transport:Transport},normal=control.transport;
+    control.transport=async()=>{n++;return {status:200,json:{choices:[{message:{content:'{}'}}]}};};
+    await expect(plugin.begin()).rejects.toThrow('kind');expect(n).toBe(1);control.transport=normal;await plugin.retry();
+    expect(JSON.stringify(calls.at(-1)!.conversation)).toContain('kind');
+  });
+  it('returns rejected proposals and validation errors to the next iteration without overriding dates',async()=>{
     const {plugin,calls,files}=fixture();
     const control=plugin as unknown as {transport:Transport},normal=control.transport;
     control.transport=async(url,body,key)=>{
       const response=await normal(url,body,key),json=response.json as {choices:{message:{content:string}}[]};
-      const r=JSON.parse(json.choices[0].message.content);r.decisions[0].action='future';r.decisions[0].date='2026-10-20';
+      const r=JSON.parse(json.choices[0].message.content);r.review.decisions[0].action='future';r.review.decisions[0].date='2026-10-20';
       json.choices[0].message.content=JSON.stringify(r);return response;
     };
-    const before=new Map(files);await plugin.begin();
+    const before=new Map(files);await expect(plugin.begin()).rejects.toThrow('timing=asap');
     expect(plugin.diagnostics!.rawReview!.decisions[0].date).toBe('2026-10-20');
-    expect(plugin.draft!.review.decisions[0].date).toBe('2026-10-10');
-    expect(plugin.lastRecord!.request).toBeDefined();expect(plugin.lastRecord!.response).toBeDefined();expect(plugin.lastRecord!.result).toBeDefined();
-    plugin.device.notes='为什么日期不对？';await plugin.iterate();
-    expect(JSON.stringify(calls.at(-1)!.previousProcessing)).toContain('本地规则改写');expect(files).toEqual(before);
+    expect(plugin.draft).toBeNull();
+    expect(plugin.lastRecord!.request).toBeDefined();expect(plugin.lastRecord!.response).toBeDefined();expect(plugin.lastRecord!.error).toContain('timing=asap');
+    control.transport=normal;plugin.device.notes='为什么日期不对？';await plugin.iterate();
+    expect(JSON.stringify(calls.at(-1)!.previousProcessing)).toContain('timing=asap');expect(files).toEqual(before);
   });
   it('saves validation failures and sends the failed output and error on retry',async()=>{
     const {plugin,calls}=fixture(),control=plugin as unknown as {transport:Transport},normal=control.transport;

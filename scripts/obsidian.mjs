@@ -49,12 +49,12 @@ try {
   p.transport=async(_url,body)=>{
    window.rpCalls++;const data=JSON.parse(JSON.parse(body).messages[1].content),adjust=data.feedback.length>0;
    const shift=n=>{const d=new Date(data.today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
-   const mk=(t,fields)=>({id:t.id,text:t.text,action:'tomorrow',date:data.tomorrow,deadline:null,start:null,end:null,priority:'normal',reason:'继续安排',...fields});
+   const mk=(t,fields)=>({id:t.id,text:t.text,action:'tomorrow',date:data.tomorrow,deadline:null,start:null,end:null,priority:'normal',reason:'继续安排',timing:fields?.action==='cancel'?'none':fields?.action==='keep'?(fields.date?'hold':'none'):'explicit',timeSpecified:!!fields?.start,category:'task',...fields});
    const decisions=data.tasks.map(t=>t.text.includes('周报')?mk(t,{text:'提交周报',action:'future',date:shift(4)}):mk(t,{priority:adjust?'high':'normal'}));
    for(const t of data.completed)decisions.push(mk(t,{action:'keep',date:null}));
-   for(const t of data.future)decisions.push(t.text.includes('学长')?mk(t,{action:adjust?'cancel':'keep',date:t.date}):mk(t,{start:adjust?'15:00':'14:00',end:adjust?'16:00':'15:00'}));
+   for(const t of data.future)decisions.push(t.text.includes('学长')?mk(t,{action:adjust?'cancel':'keep',date:adjust?null:t.date}):mk(t,{start:adjust?'15:00':'14:00',end:adjust?'16:00':'15:00'}));
    if(adjust)decisions.push(mk({id:'new:1',text:'准备周报材料'},{action:'future',date:shift(3)}));
-   return {status:200,json:{choices:[{message:{content:JSON.stringify({summary:'完成实验记录整理，明天优先分析数据。',decisions,questions:adjust?[]:['联系学长是否仍需要？']})}}],usage:{prompt_tokens:10,completion_tokens:10}}};
+   return {status:200,json:{choices:[{message:{content:JSON.stringify({kind:'plan',message:'合成测试提案',review:{summary:'完成实验记录整理，明天优先分析数据。',decisions,questions:adjust?[]:['联系学长是否仍需要？']}})}}],usage:{prompt_tokens:10,completion_tokens:10}}};
   };window.rpTransport=p.transport;
  });
  const idle=()=>page.waitForFunction(()=>!window.app.plugins.plugins['research-planner'].busy);
@@ -64,7 +64,7 @@ try {
  assert.equal(await page.evaluate(p=>window.app.plugins.plugins['research-planner'].service.store.read(p),fixture.layout.todayPath),fixture.todayText);
  checks.push('Initial review reads only requested notes, writes nothing, questions block acceptance');
  await page.getByLabel('你的补充或调整意见').fill('不用联系学长了。组会改到15点到16点，明天优先分析数据，不排时间。周四准备周报材料。');
- await page.getByRole('button',{name:'更新草稿',exact:true}).click();await idle();
+ await page.getByRole('button',{name:'发送 / 调整计划',exact:true}).click();await idle();
  assert.equal(await page.evaluate(()=>window.rpCalls),2);
  await page.screenshot({path:path.join(runtime,'daily-preview.png')});
  await page.getByRole('button',{name:'接受并写入',exact:true}).click();await idle();
@@ -85,7 +85,7 @@ try {
  // A network failure keeps the user's input and all Vault bytes.
  await page.getByLabel('你的补充或调整意见').fill('网络故障时保留这句话');
  await page.evaluate(()=>{window.app.plugins.plugins['research-planner'].transport=async()=>{throw Error('offline');};});
- await page.getByRole('button',{name:'更新草稿',exact:true}).click();await idle();
+ await page.getByRole('button',{name:'发送 / 调整计划',exact:true}).click();await idle();
  assert.equal(await page.getByLabel('你的补充或调整意见').inputValue(),'网络故障时保留这句话');
  assert.match(await page.locator('.rp-status').innerText(),/网络失败/);checks.push('Network failure preserves feedback and does not write notes');
  // Closing the view while a response is pending never reopens it or commits a draft.
@@ -112,7 +112,7 @@ try {
   p.feedback=[];p.device.notes='';
   p.transport=async(_url,body)=>{
    const data=JSON.parse(JSON.parse(body).messages[1].content);window.completedReviewPayload=data;
-   return {status:200,json:{choices:[{message:{content:JSON.stringify({summary:'今天完成调试，明天验证。',decisions:data.completed.map(t=>({id:t.id,text:'验证稳定性',action:'tomorrow',date:data.tomorrow,deadline:null,start:null,end:null,priority:'normal',reason:'原条目明确安排后续'})),questions:[]})}}]}};
+   return {status:200,json:{choices:[{message:{content:JSON.stringify({kind:'plan',message:'合成测试提案',review:{summary:'今天完成调试，明天验证。',decisions:data.completed.map(t=>({id:t.id,text:'验证稳定性',action:'tomorrow',date:data.tomorrow,deadline:null,start:null,end:null,priority:'normal',reason:'原条目明确安排后续',timing:'explicit',timeSpecified:false,category:'task'})),questions:[]}})}}]}};
   };
  },fixture);
  await page.getByRole('button',{name:'重新读取并复盘',exact:true}).click();await idle();
@@ -131,8 +131,8 @@ try {
   await p.service.store.create(old.todayPath,text);
   p.transport=async(_url,body)=>{
    const data=JSON.parse(JSON.parse(body).messages[1].content);window.todayPlanningPayload=data;
-   const mk=(t,fields={})=>({id:t.id,text:t.text,action:data.target,date:data.targetDate,deadline:null,start:null,end:null,priority:'normal',reason:'补做接续',...fields});
-   return {status:200,json:{choices:[{message:{content:JSON.stringify({summary:'今天继续遗漏的实验记录。',questions:[],decisions:[...data.tasks.map(t=>mk(t)),...data.completed.map(t=>mk(t,{action:'keep',date:null})),...data.future.map(t=>mk(t,{action:'keep',date:t.date}))]})}}]}};
+   const mk=(t,fields={})=>({id:t.id,text:t.text,action:data.target,date:data.targetDate,deadline:null,start:null,end:null,priority:'normal',reason:'补做接续',timing:fields.action==='keep'?(fields.date?'hold':'none'):'asap',timeSpecified:false,category:'task',...fields});
+   return {status:200,json:{choices:[{message:{content:JSON.stringify({kind:'plan',message:'合成测试提案',review:{summary:'今天继续遗漏的实验记录。',questions:[],decisions:[...data.tasks.map(t=>mk(t)),...data.completed.map(t=>mk(t,{action:'keep',date:null})),...data.future.map(t=>mk(t,{action:'keep',date:t.date}))]}})}}]}};
   };
   return {yesterday,path:old.todayPath,text};
  },fixture);

@@ -3,6 +3,8 @@ export interface ConversationRecord {
   version:1;id:string;startedAt:string;targetDate:string;feedback:string[];pluginVersion?:string;
   request?:unknown;response?:unknown;rawReview?:unknown;result?:unknown;error?:string;
   acceptedAt?:string;
+  turns?:{role:'user'|'assistant'|'validator';content:string}[];planTarget?:'today'|'tomorrow';
+  sourceDay?:string;
 }
 export interface ConversationAdapter {
   exists(path:string):Promise<boolean>;mkdir(path:string):Promise<void>;

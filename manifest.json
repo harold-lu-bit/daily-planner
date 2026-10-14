@@ -1,7 +1,7 @@
 {
   "id": "research-planner",
   "name": "Research Planner",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "minAppVersion": "1.13.0",
   "description": "补读遗漏日记，安排今天或明天，自然语言调整并确认写入，日记任务不附加 ID。",
   "author": "Harold",

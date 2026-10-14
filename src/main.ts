@@ -1,16 +1,17 @@
 import { App, ItemView, Modal, Notice, Plugin, PluginSettingTab, SecretComponent, Setting, WorkspaceLeaf, moment, requestUrl } from 'obsidian';
 import { addDay, CONFIG_PATH, frontmatter, minute, safePath, today } from './core';
-import { DailyService, QUEUE_PATH, ReviewSchema, reviewInstruction, reviewPayload, outlinePreview, type BatchJournal, type DailyDraft, type Layout, type Review, type Snapshot } from './daily';
+import { DailyService, QUEUE_PATH, reviewInstruction, reviewPayload, outlinePreview, type BatchJournal, type DailyDraft, type Layout, type Review, type Snapshot } from './daily';
 import { callModel, TruncatedOutputError, type ProviderConfig, type Usage } from './provider';
 import { ObsidianStore } from './store';
 import { z } from 'zod';
 import type Moment from 'moment';
 import {ConversationArchive,type ConversationRecord} from './conversation';
+import {ReplySchema,mergeReply,dialogueInstruction,restoreDialogue,type Reply,type Turn} from './dialogue';
 const dateMoment=moment as unknown as typeof Moment;
 const VIEW='research-planner-view';
 interface Settings extends ProviderConfig {secretName:string; reminder:string; dailyCallLimit:number; timezone:string; heading:string;}
 const DEFAULTS:Settings={baseUrl:'',model:'',format:'json_object',timeout:120,maxTokens:16384,secretName:'research-planner-api',reminder:'22:30',dailyCallLimit:30,timezone:'Asia/Shanghai',heading:'Tasks'};
-interface Device {writes:boolean; reminders:boolean; reminded:string; quotaDay:string; calls:number; input:number; output:number; journal:BatchJournal|null; notes:string; archiveId?:string;}
+interface Device {writes:boolean; reminders:boolean; reminded:string; quotaDay:string; calls:number; input:number; output:number; journal:BatchJournal|null; notes:string; archiveId?:string;conversationPath?:string;}
 const fresh=():Device=>({writes:false,reminders:false,reminded:'',quotaDay:'',calls:0,input:0,output:0,journal:null,notes:''});
 const errorText=(e:unknown)=>e instanceof Error?e.message:'操作失败，请检查设置';
 function button(el:HTMLElement,text:string,action:()=>void,primary=false):HTMLButtonElement {
@@ -21,6 +22,7 @@ export default class ResearchPlanner extends Plugin {
  snapshot:Snapshot|null=null;draft:DailyDraft|null=null;feedback:string[]=[];status='';
  draftStale=false;lastTruncation:TruncatedOutputError|null=null;
  archive:ConversationArchive|null=null;archiveWarning='';lastRecord:ConversationRecord|null=null;
+ turns:Turn[]=[];private requestMode:'plan'|'auto'|'explain'='plan';private draftRecord:ConversationRecord|null=null;
  diagnostics:{rawReview:Review|null;localWarnings:string[];error:string|null;responseExcerpt?:string}|null=null;
  planTarget:'today'|'tomorrow'='tomorrow';catchUp=true;catchUpFrom='';sourceMode:'latest'|'range'='latest';
  private deviceKey='';private generation=0;private checkingReminder=false;
@@ -30,6 +32,14 @@ export default class ResearchPlanner extends Plugin {
   try{this.device={...fresh(),...this.app.loadLocalStorage(this.deviceKey)};}catch{this.device=fresh();}
   this.device.archiveId??=crypto.randomUUID();this.persistDevice();
   this.archive=new ConversationArchive(this.app.vault.adapter,`${this.app.vault.configDir}/plugins/research-planner/conversations-${this.device.archiveId}`);
+  if(this.device.conversationPath)try{
+    const saved=JSON.parse(await this.archive.read(this.device.conversationPath));
+    const restored=restoreDialogue(saved,today(this.settings.timezone));
+    if(restored){
+      this.turns=restored.turns;this.feedback=restored.feedback;this.planTarget=restored.target;
+      this.turns.push({role:'validator',content:'插件已重载；对话保留，但草稿和旧 ID 已失效，必须重新读取再规划。'});
+    }
+  }catch{this.archiveWarning='历史对话未能恢复；可从会话记录手动查看。';}
   this.service=new DailyService(new ObsidianStore(this.app),day=>this.layout(day),(day,pattern)=>dateMoment(day,'YYYY-MM-DD',true).format(pattern));
   this.registerView(VIEW,leaf=>new ReviewView(leaf,this));
   this.addRibbonIcon('calendar-check','日记复盘',()=>void this.openView());
@@ -47,7 +57,7 @@ export default class ResearchPlanner extends Plugin {
   const key=this.app.secretStorage?.getSecret(this.settings.secretName);
   const safeRecord=JSON.parse(JSON.stringify(record,(_k,v)=>key&&typeof v==='string'?v.split(key).join('[REDACTED]'):v)) as ConversationRecord;
   this.lastRecord=safeRecord;
-  try{if(this.archive)await this.archive.save(safeRecord);this.archiveWarning='';}
+  try{if(this.archive){this.device.conversationPath=await this.archive.save(safeRecord);this.persistDevice();}this.archiveWarning='';}
   catch{this.archiveWarning='会话记录保存失败；当前记录仍可复制，请检查 Vault 存储空间和权限。';}
  }
  async showHistory():Promise<void>{
@@ -113,58 +123,85 @@ export default class ResearchPlanner extends Plugin {
   if(this.device.journal?.state==='pending')throw new Error('存在未完成写入，请先使用“恢复 / 撤销”处理');
   this.draftStale=true;this.lastTruncation=null;
   const next=await this.service.snapshot(today(this.settings.timezone),{target:this.planTarget,catchUp:this.catchUp,sourceMode:this.sourceMode,from:this.catchUp&&this.sourceMode==='range'?this.catchUpFrom||undefined:undefined});
-  if(this.snapshot?.layout.day!==next.layout.day){this.feedback=[];this.diagnostics=null;}
+  if(this.snapshot&&this.snapshot.layout.day!==next.layout.day){this.feedback=[];this.turns=[];}
+  if(this.turns.length)this.turns.push({role:'validator',content:'已重新读取来源。当前输入 ID 和原文为准；旧草稿不作为 patch 基础。'});
   this.diagnostics=null;
   this.snapshot=next;
+  this.requestMode='plan';
   await this.generate();
  }
  async iterate():Promise<void>{
   if(!this.snapshot)throw new Error('请先开始复盘');
   if(!this.device.notes.trim())throw new Error('请先填写你的调整意见');
+  this.requestMode='auto';
   await this.generate();
  }
  async retry():Promise<void>{await this.generate();}
+ async explain():Promise<void>{
+  if(!this.snapshot||!this.device.notes.trim())throw new Error('请先读取任务并填写问题');
+  this.requestMode='explain';await this.generate();
+ }
+ resetConversation():void{
+  this.snapshot=null;this.draft=null;this.feedback=[];this.turns=[];this.diagnostics=null;this.draftRecord=null;this.lastRecord=null;
+  this.device.conversationPath=undefined;this.persistDevice();this.status='已开始新对话；历史记录仍保留，请重新读取任务。';this.refresh();
+ }
  async retryWithMoreTokens():Promise<void>{
   if(!this.lastTruncation||this.lastTruncation.limit!==this.settings.maxTokens||this.settings.maxTokens>=32768)throw new Error('请检查当前输出上限，再重试生成');
   this.settings.maxTokens=Math.min(32768,this.settings.maxTokens*2);await this.saveSettings();
   await this.generate();
  }
  private async generate():Promise<void>{
-  this.draftStale=true;this.lastTruncation=null;
+  const mode=this.requestMode,wasStale=this.draftStale;
+  if(mode!=='explain')this.draftStale=true;
+  this.lastTruncation=null;
   const snapshot=this.snapshot;if(!snapshot)throw new Error('请重新开始复盘');
   if(snapshot.layout.day!==today(this.settings.timezone))throw new Error('日期已经变化，请重新读取今天的日记');
   const token=++this.generation,notes=this.device.notes.trim();
   if(notes.length>10000)throw new Error('调整意见请控制在 10000 字符内');
-  const feedback=notes?[...this.feedback,notes]:this.feedback,previous=this.draft?.snapshot===snapshot?this.draft.review:null;
-  const payload={...reviewPayload(snapshot,feedback,previous),previousProcessing:this.diagnostics,currentTime:new Intl.DateTimeFormat('en-GB',{timeZone:this.settings.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date())};
-  if(JSON.stringify(payload).length>100000)throw new Error('讨论上下文过长，请重新读取后简要说明');
-  const record:ConversationRecord={version:1,id:`${new Date().toISOString().replace(/[:.]/g,'-')}-${crypto.randomUUID()}`,startedAt:new Date().toISOString(),targetDate:snapshot.targetDay,feedback:[...feedback],pluginVersion:this.manifest?.version??'development'};
+  const feedback=notes&&this.feedback.at(-1)!==notes?[...this.feedback,notes]:this.feedback;
+  const previous=this.draft?.snapshot===snapshot?this.draft.review:null;
+  if(notes&&(this.turns.at(-1)?.role!=='validator'||[...this.turns].reverse().find(t=>t.role==='user')?.content!==notes))this.turns.push({role:'user',content:notes});
+  const payload={...reviewPayload(snapshot,feedback,previous),conversation:this.turns,latestMessage:notes,requestMode:mode,previousProcessing:this.diagnostics,timezone:this.settings.timezone,currentTime:new Intl.DateTimeFormat('en-GB',{timeZone:this.settings.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date())};
+  if(JSON.stringify(payload).length>180000)throw new Error('讨论上下文过长；记录已保留，请开始新对话后简要说明');
+  const record:ConversationRecord={version:1,id:`${new Date().toISOString().replace(/[:.]/g,'-')}-${crypto.randomUUID()}`,startedAt:new Date().toISOString(),sourceDay:snapshot.layout.day,targetDate:snapshot.targetDay,feedback:[...feedback],pluginVersion:this.manifest?.version??'development',planTarget:this.planTarget,turns:[...this.turns]};
   await this.saveRecord(record);
-  let review:Review;
   try {
-  if(!payload.tasks.length&&!payload.completed.length&&!payload.future.length&&!feedback.length)review={summary:'本次没有需要接续的未完成任务；已有安排保持原样。',decisions:[],questions:[]};
-  else {
-   try {
-    const r=await callModel(this.settings,this.reserve(),this.transport,ReviewSchema,reviewInstruction,payload,async event=>{
+   let reply:Reply;
+   if(!payload.tasks.length&&!payload.completed.length&&!payload.future.length&&!feedback.length)reply={kind:'plan',message:'本次没有待安排任务。',review:{summary:'已有安排保持原样。',decisions:[],questions:[]}};
+   else{
+    try{
+     const r=await callModel(this.settings,this.reserve(),this.transport,ReplySchema,reviewInstruction+dialogueInstruction,payload,async event=>{
       if(event.stage==='request')record.request=event.payload;else record.response=event;
       await this.saveRecord(record);
-    });this.usage(r.usage);review=r.value;
-   }catch(e){
-    if(e instanceof TruncatedOutputError){if(e.usage)this.usage({input:e.usage.input??0,output:e.usage.output??0});if(token===this.generation)this.lastTruncation=e;}
-    throw e;
+     });this.usage(r.usage);reply=r.value;
+    }catch(e){
+     if(e instanceof TruncatedOutputError){if(e.usage)this.usage({input:e.usage.input??0,output:e.usage.output??0});if(token===this.generation)this.lastTruncation=e;}
+     throw e;
+    }
    }
-  }
-  record.rawReview=review;this.diagnostics={rawReview:review,localWarnings:[],error:null};
-  if(token!==this.generation){this.status='面板已关闭，本次响应未应用；笔记没有变化。';record.error=this.status;await this.saveRecord(record);return;}
-  this.draft=this.service.draft(snapshot,review,feedback.length>0,feedback);this.feedback=feedback;this.draftStale=false;
-  this.diagnostics.localWarnings=this.draft.warnings;
-  record.result={review:this.draft.review,warnings:this.draft.warnings};await this.saveRecord(record);
-  if(this.device.notes.trim()===notes)this.device.notes='';this.persistDevice();
-  this.status=`草稿已更新，尚未写入。请检查 ${snapshot.targetDay} 的安排、遗漏任务的去向和跨日清单。`;
+   if(token!==this.generation){this.status='面板已关闭，本次响应未应用；笔记没有变化。';record.error=this.status;await this.saveRecord(record);return;}
+   if(mode==='explain'&&reply.kind!=='answer')throw new Error('本次只解释，模型却返回了计划修改；原草稿保持不变，请重试解释');
+   this.turns.push({role:'assistant',content:reply.message});
+   const review=mergeReply(reply,previous);
+   if(review){
+    record.rawReview=review;this.diagnostics={rawReview:review,localWarnings:[],error:null};
+    const next=this.service.draft(snapshot,review,feedback.length>0,feedback);
+    this.draft=next;this.draftStale=false;this.draftRecord=record;
+    this.diagnostics.localWarnings=next.warnings;
+    record.result={kind:reply.kind,review:next.review,warnings:next.warnings};
+    this.turns.push({role:'validator',content:next.warnings.length?`预览已生成，尚未写入。校验提示：${next.warnings.join('；')}`:'结构和写入范围校验通过；语义由模型解释，尚未写入，等待用户确认。'});
+    this.status=`草稿已更新，尚未写入。请检查 ${snapshot.targetDay} 的安排。`;
+   }else{
+    if(mode==='explain')this.draftStale=wasStale;
+    record.result={kind:'answer',message:reply.message};this.status='已回答，本轮没有修改日程；需要落实调整时请发送调整要求。';
+   }
+   this.feedback=feedback;
+   if(this.device.notes.trim()===notes)this.device.notes='';this.persistDevice();
+   record.turns=[...this.turns];await this.saveRecord(record);
   }catch(e){
-    record.error=errorText(e);await this.saveRecord(record);
-    this.diagnostics={rawReview:(record.rawReview as Review|undefined)??null,localWarnings:[],error:record.error,responseExcerpt:(record.response as {content?:string}|undefined)?.content?.slice(0,12000)};
-    throw e;
+   record.error=errorText(e);this.turns.push({role:'validator',content:record.error});record.turns=[...this.turns];await this.saveRecord(record);
+   this.diagnostics={rawReview:(record.rawReview as Review|undefined)??null,localWarnings:[],error:record.error,responseExcerpt:(record.response as {content?:string}|undefined)?.content?.slice(0,12000)};
+   throw e;
   }
  }
  async accept():Promise<void>{
@@ -175,9 +212,9 @@ export default class ResearchPlanner extends Plugin {
   if(this.device.notes.trim())throw new Error('还有未提交的调整意见，请先更新草稿或清空输入');
   if(this.draft.snapshot.layout.day!==today(this.settings.timezone))throw new Error('日期已经变化，请重新读取');
   await this.service.apply(this.draft,async j=>{this.device.journal=j;this.persistDevice();});
-  if(this.lastRecord){this.lastRecord.acceptedAt=new Date().toISOString();await this.saveRecord(this.lastRecord);}
+  if(this.draftRecord){this.draftRecord.acceptedAt=new Date().toISOString();this.draftRecord.turns=[...this.turns,{role:'validator',content:'用户已接受，日程已写入。'}];this.draftRecord.feedback=[...this.feedback];await this.saveRecord(this.draftRecord);}
   this.device.reminded=this.draft.snapshot.layout.day;this.persistDevice();
-  this.draft=null;this.snapshot=null;this.feedback=[];
+  this.draft=null;this.snapshot=null;this.feedback=[];this.turns=[];this.diagnostics=null;this.draftRecord=null;
   this.status='已保存日程与任务去向。可继续直接在日记中勾选、修改或删除任务。';
  }
  confirmUndo():void {
@@ -209,7 +246,7 @@ class ReviewView extends ItemView {
   const p=this.plugin,el=this.contentEl;el.empty();el.addClass('rp-panel');
   el.createEl('div',{text:'RESEARCH PLANNER · DAILY',cls:'rp-eyebrow'});el.createEl('h2',{text:'接续任务，安排日程'});
   el.createEl('p',{text:'先在最近那篇 TODO 中勾选完成项、删改旧任务并追加新任务，再选择安排今天或明天。中断几天也会按这份清单继续。',cls:'rp-muted'});
-  const reset=()=>{p.snapshot=null;p.draft=null;p.feedback=[];p.diagnostics=null;p.status='安排日期或补读范围已改变，请重新生成草稿。';p.refresh();};
+  const reset=()=>{p.resetConversation();p.status='安排日期或补读范围已改变，请重新生成草稿。';p.refresh();};
   new Setting(el).setName('安排哪一天').addDropdown(c=>{c.selectEl.setAttribute('aria-label','安排哪一天');c.addOption('today','今天').addOption('tomorrow','明天').setValue(p.planTarget).setDisabled(p.busy).onChange(v=>{p.planTarget=v as 'today'|'tomorrow';reset();});});
   new Setting(el).setName('接续旧日记 TODO').setDesc('先整理最近那篇 TODO：勾选完成、删除不需要的任务并追加新任务。中断几天不表示任务已完成。').addToggle(c=>c.setValue(p.catchUp).setDisabled(p.busy).onChange(v=>{p.catchUp=v;reset();}));
   if(p.catchUp)new Setting(el).setName('任务来源').addDropdown(c=>{c.selectEl.setAttribute('aria-label','任务来源');c.addOption('latest','最近一份 TODO（默认）').addOption('range','按日期范围合并（高级）').setValue(p.sourceMode).setDisabled(p.busy).onChange(v=>{p.sourceMode=v as 'latest'|'range';reset();});});
@@ -224,6 +261,7 @@ class ReviewView extends ItemView {
   button(actions,p.snapshot?'重新读取并复盘':'开始复盘',()=>void p.action(()=>p.begin()),true).disabled=p.busy;
   button(actions,'恢复 / 撤销',()=>p.confirmUndo()).disabled=p.busy;
   button(actions,'会话记录 / 复制',()=>void p.action(()=>p.showHistory())).disabled=p.busy;
+  button(actions,'开始新对话',()=>p.resetConversation()).disabled=p.busy;
   if(p.archiveWarning)el.createEl('p',{text:p.archiveWarning,cls:'rp-hint'});
   if(!p.device.writes)el.createEl('p',{text:'当前只预览。确认写入前，请在设置中开启本设备写入。',cls:'rp-hint'});
   el.createEl('p',{text:'0.1 版独立任务不会自动导入；需要继续的任务请手动放入今天的 Tasks。',cls:'rp-muted'});
@@ -243,8 +281,7 @@ class ReviewView extends ItemView {
   }
   if(p.draft) {
    if(p.draftStale)el.createEl('p',{text:`以下是上一次成功生成的 ${p.draft.snapshot.targetDay} 预览，尚未包含本次重新读取或调整；当前不可写入，请重试生成。`,cls:'rp-hint'});
-   const d=p.draft;el.createEl('h3',{text:'模型说明（本地校验前）'});el.createEl('p',{text:d.review.summary,cls:'rp-summary'});
-   if(d.warnings.some(w=>w.startsWith('本地规则改写')))el.createEl('p',{text:'本地规则修改了模型提议，下方任务日期才是最终预览。改写原因已记录，下次调整时也会发给模型。',cls:'rp-hint'});
+   const d=p.draft;el.createEl('h3',{text:'计划说明'});el.createEl('p',{text:d.review.summary,cls:'rp-summary'});
    el.createEl('h3',{text:d.snapshot.target==='today'?'今天的安排':'明日新增任务'});
    const next=d.review.decisions.filter(t=>t.action===d.snapshot.target);
    if(!next.length)el.createEl('p',{text:'没有新增任务，已有安排保持原样。',cls:'rp-muted'});
@@ -264,12 +301,17 @@ class ReviewView extends ItemView {
    for(const c of d.changes){changes.createEl('h4',{text:c.path});changes.createEl('pre',{text:c.after});}
   }
   if(p.snapshot&&!p.draft)el.createEl('p',{text:p.busy?'正在生成日程预览…':'尚未生成有效预览。来源任务已读取；请查看下方错误说明并重试。',cls:'rp-hint'});
+  if(p.turns.length){
+   const chat=el.createEl('details');chat.open=true;chat.createEl('summary',{text:'本次对话'});
+   for(const t of p.turns){chat.createEl('strong',{text:t.role==='user'?'你':t.role==='assistant'?'助手':'校验结果'});const msg=chat.createEl('p',{text:t.content});msg.style.whiteSpace='pre-wrap';}
+  }
   const label=el.createEl('label',{cls:'rp-field'});label.createEl('span',{text:'你的补充或调整意见'});
   const input=label.createEl('textarea',{attr:{'aria-label':'你的补充或调整意见',rows:'4',placeholder:'例如：实验顺延到周五，明天优先分析数据，不安排具体时间。'}});
   input.value=p.device.notes;input.disabled=p.busy;
   input.addEventListener('input',()=>{p.device.notes=input.value;try{p.persistDevice();}catch{new Notice('本机输入保存失败，请先复制文字。');}});
   const footer=el.createDiv({cls:'rp-actions'});
-  if(p.snapshot)button(footer,!p.draft||p.draftStale?'重试生成':'更新草稿',()=>void p.action(()=>!p.draft||p.draftStale?p.retry():p.iterate())).disabled=p.busy;
+  if(p.snapshot)button(footer,'只解释，不改计划',()=>void p.action(()=>p.explain())).disabled=p.busy;
+  if(p.snapshot)button(footer,!p.draft||p.draftStale?'重试 / 发送调整':'发送 / 调整计划',()=>void p.action(()=>p.device.notes.trim()?p.iterate():p.retry())).disabled=p.busy;
   if(p.snapshot&&p.lastTruncation&&p.lastTruncation.limit===p.settings.maxTokens&&p.settings.maxTokens<32768){
    button(footer,`提高上限至 ${Math.min(32768,p.settings.maxTokens*2)} 并重试`,()=>void p.action(()=>p.retryWithMoreTokens())).disabled=p.busy;
    el.createEl('p',{text:'提高上限会保存到插件设置，并发起一次新请求，可能增加用量；不会自动重试或写入笔记。',cls:'rp-muted'});

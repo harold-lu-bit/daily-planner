@@ -16,7 +16,7 @@ describe('Resume the latest manually maintained TODO',()=>{
   const before=new Map(files),s=await service.snapshot(day,{...latest,target});
   expect(s.history.map(n=>n.day)).toEqual(['2026-10-09']);expect(reads).not.toContain(path('2026-10-08'));
   expect(reviewPayload(s,[],null).authoritativeTodoDay).toBe('2026-10-09');expect(pendingTasks(s).map(t=>t.text)).toEqual(['项目','修改后的步骤','新增任务']);
-  const r=review(s);for(const t of r.decisions)if(t.action!== 'keep')Object.assign(t,{action:'future',date:'2026-10-25',reason:'隔了几天，延期'});
+  const r=review(s);
   const d=service.draft(s,r,false);expect(files).toEqual(before);expect(d.review.decisions.filter(t=>t.action===target)).toHaveLength(3);
   await service.apply(d,async()=>{});const raw=files.get(path(s.targetDay))!;expect(raw).toContain('- [ ] 项目\n    - [ ] 修改后的步骤');expect(raw).toContain('- [ ] 新增任务');expect(raw).not.toContain('已完成步骤');
   expect(files.get(path('2026-10-09'))).toContain('- [x] 已完成步骤');expect(parseQueue(files.get(QUEUE_PATH)! ).tasks).toHaveLength(0);expect(files.has(path('2026-10-10'))).toBe(false);
@@ -48,17 +48,17 @@ describe('Resume the latest manually maintained TODO',()=>{
  it('bounds the search and explicitly reports when no checklist was found',async()=>{
   const {service,reads}=fixture();const s=await service.snapshot(day,latest);expect(s.probes).toHaveLength(30);expect(s.warnings.join()).toContain('未找到 TODO');expect(reads).not.toContain(path(addDay(day,-31)));
  });
- it('schedules overdue/due queue items despite model keep, while retaining a genuinely future appointment',async()=>{
+ it('schedules model-classified overdue/due queue items, while retaining a genuinely future appointment',async()=>{
   const {files,service}=fixture();files.set(QUEUE_PATH,renderQueue({type:'research-planner-future',version:2,reviewed:[],tasks:['2026-10-09','2026-10-12','2026-10-20'].map((date,i)=>({id:crypto.randomUUID(),text:'事项'+i,date,deadline:null,start:null,end:null,priority:'normal'}))}));
-  const s=await service.snapshot(day,{...latest,target:'today'}),d=service.draft(s,review(s),false);await service.apply(d,async()=>{});
+  const s=await service.snapshot(day,{...latest,target:'today'}),r=review(s);for(const t of r.decisions)if(t.date!<=day)Object.assign(t,{action:'today',date:day,timing:'asap'});const d=service.draft(s,r,false);await service.apply(d,async()=>{});
   expect(readTasks(files.get(path(day))!).map(t=>t.text)).toEqual(['事项0','事项1']);expect(parseQueue(files.get(QUEUE_PATH)!).tasks.map(t=>t.date)).toEqual(['2026-10-20']);
  });
  it('still respects an explicit request to leave overdue queued work unassigned',async()=>{
   const {files,service}=fixture();files.set(QUEUE_PATH,renderQueue({type:'research-planner-future',version:2,reviewed:[],tasks:[{id:crypto.randomUUID(),text:'等待反馈',date:'2026-10-09',deadline:null,start:null,end:null,priority:'normal'}]}));
   const s=await service.snapshot(day,latest);expect(service.draft(s,review(s),false,['等待反馈暂不安排。']).review.decisions[0].action).toBe('keep');
  });
- it('corrects a model attempt to put an undated TODO in an undated future bucket',async()=>{
+ it('rejects an undated future bucket instead of guessing a replacement',async()=>{
   const {files,service}=fixture();files.set(path('2026-10-09'),'## Tasks\n- [ ] 未完成工作\n');const s=await service.snapshot(day,latest),r=review(s);Object.assign(r.decisions[0],{action:'future',date:null});
-  expect(service.draft(s,r,false).review.decisions[0]).toMatchObject({action:'tomorrow',date:'2026-10-13'});
+  expect(()=>service.draft(s,r,false)).toThrow('未来任务');
  });
 });
